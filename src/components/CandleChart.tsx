@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, CandlestickSeries, createSeriesMarkers, type Time } from "lightweight-charts";
+import { createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, type Time } from "lightweight-charts";
 
 export interface CandleChartData {
   date: string; // YYYYMMDD
@@ -9,6 +9,7 @@ export interface CandleChartData {
   high: number;
   low: number;
   close: number;
+  volume: number;
 }
 
 export interface MarkerData {
@@ -27,7 +28,15 @@ const STRATEGY_LABEL: Record<string, string> = {
   strategy3: "전략3",
 };
 
-export function CandleChart({ candles, markers }: { candles: CandleChartData[]; markers: MarkerData[] }) {
+export function CandleChart({
+  candles,
+  markers,
+  highlightDate,
+}: {
+  candles: CandleChartData[];
+  markers: MarkerData[];
+  highlightDate?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,6 +63,8 @@ export function CandleChart({ candles, markers }: { candles: CandleChartData[]; 
       wickUpColor: "#dc2626",
       wickDownColor: "#2563eb",
     });
+    // 캔들 영역은 위쪽 78%, 아래 22%는 거래량 히스토그램에 내준다.
+    series.priceScale().applyOptions({ scaleMargins: { top: 0.05, bottom: 0.22 } });
 
     series.setData(
       candles.map((c) => ({
@@ -65,23 +76,51 @@ export function CandleChart({ candles, markers }: { candles: CandleChartData[]; 
       }))
     );
 
-    if (markers.length > 0) {
-      createSeriesMarkers(
-        series,
-        markers.map((m) => ({
-          time: toTime(m.date),
-          position: "belowBar" as const,
-          color: "#f59e0b",
-          shape: "arrowUp" as const,
-          text: STRATEGY_LABEL[m.strategyKey] ?? m.strategyKey,
-        }))
-      );
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "volume",
+      color: isDark ? "#525252" : "#a3a3a3",
+    });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    volumeSeries.setData(
+      candles.map((c) => ({
+        time: toTime(c.date),
+        value: c.volume,
+        color: c.close >= c.open ? "#fca5a5" : "#93c5fd",
+      }))
+    );
+
+    const allMarkers: {
+      time: Time;
+      position: "belowBar" | "aboveBar";
+      color: string;
+      shape: "arrowUp" | "arrowDown";
+      text: string;
+    }[] = markers.map((m) => ({
+      time: toTime(m.date),
+      position: "belowBar",
+      color: "#f59e0b",
+      shape: "arrowUp",
+      text: STRATEGY_LABEL[m.strategyKey] ?? m.strategyKey,
+    }));
+    if (highlightDate) {
+      allMarkers.push({
+        time: toTime(highlightDate),
+        position: "aboveBar",
+        color: "#16a34a",
+        shape: "arrowDown",
+        text: "추천시점",
+      });
+    }
+    if (allMarkers.length > 0) {
+      allMarkers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+      createSeriesMarkers(series, allMarkers);
     }
 
     chart.timeScale().fitContent();
 
     return () => chart.remove();
-  }, [candles, markers]);
+  }, [candles, markers, highlightDate]);
 
   return <div ref={containerRef} className="h-96 w-full" />;
 }

@@ -77,10 +77,13 @@ export function StockTable({
   picks,
   showMaterial = false,
   showInstitutional = false,
+  reportDate,
 }: {
   picks: PickRow[];
   showMaterial?: boolean;
   showInstitutional?: boolean;
+  /** 이 표가 속한 리포트의 날짜 (YYYY-MM-DD). 종목 클릭 시 차트에 추천시점으로 표시한다. */
+  reportDate?: string;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
 
@@ -136,7 +139,10 @@ export function StockTable({
           {sortedPicks.map((p) => (
             <tr key={p.code} className="border-t border-neutral-100 dark:border-neutral-800">
               <td className="px-3 py-2">
-                <Link href={`/stock/${p.code}`} className="font-medium hover:underline">
+                <Link
+                  href={reportDate ? `/stock/${p.code}?date=${reportDate}` : `/stock/${p.code}`}
+                  className="font-medium hover:underline"
+                >
                   {p.name}
                 </Link>
                 <span className="ml-1 text-xs text-neutral-400">{p.code}</span>

@@ -6,12 +6,14 @@ DESIGN.md의 요구사항에 따라 구현한 매수 후보 종목 자동 스크
 
 ## 기술 스택
 
-- Next.js 16 (App Router, TypeScript) — Vercel 배포 전제
+- Next.js 16 (App Router, TypeScript) — Vercel 배포 전제, 함수 리전은 `icn1`(서울)
 - Prisma ORM 7 + PostgreSQL (Vercel Postgres, Neon 등 아무 Postgres 호환 DB)
-- Anthropic API (Claude) — 전략1의 재료(뉴스/공시) 판단 Agent
+- Google Gemini API(기본, 무료 티어) / Anthropic API(Claude) / Ollama(로컬) — 전략1의
+  재료(뉴스/공시) 판단 Agent, `MATERIAL_JUDGE_PROVIDER`로 전환
 - Resend — 리포트 생성 완료 이메일 알림
+- 카카오톡 "나에게 보내기" API — 리포트 생성 완료 카카오톡 알림 (수신자별 설정)
 - Vercel Cron — 매일 자동 리포트 생성 스케줄
-- lightweight-charts — 종목 일봉 차트 + 추천 마커
+- lightweight-charts — 종목 일봉 차트 + 추천시점/전략별 추천일 마커 + 거래량 히스토그램
 
 ## 데이터 소스와 그 한계 (중요)
 
@@ -45,12 +47,14 @@ cp .env.example .env
 | `DATABASE_URL` | Postgres 연결 문자열 |
 | `SITE_PASSWORD` | 사이트 접근용 고정 비밀번호 |
 | `SESSION_SECRET` | 세션 쿠키 서명용 랜덤 문자열 (`openssl rand -hex 32`) |
-| `MATERIAL_JUDGE_PROVIDER` | `anthropic`(운영 권장) 또는 `ollama`(로컬 개발/테스트, 무료) |
+| `MATERIAL_JUDGE_PROVIDER` | `gemini`(기본, 무료 티어로 로컬/운영 모두 사용 가능, 권장) / `anthropic`(유료) / `ollama`(로컬 전용, 클라우드에서는 접근 불가) |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | provider=gemini일 때 필요. 키는 https://aistudio.google.com/apikey 에서 무료 발급 |
 | `ANTHROPIC_API_KEY` | provider=anthropic일 때 필요한 Claude API 키 |
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | provider=ollama일 때 사용할 로컬 Ollama 서버 주소/모델 |
 | `DART_API_KEY` | DART Open API 키 |
 | `RESEND_API_KEY` / `ALERT_EMAIL_FROM` / `ALERT_EMAIL_TO` | 리포트 완료 이메일 알림 |
-| `NEXT_PUBLIC_BASE_URL` | 이메일에 넣을 웹페이지 기본 URL |
+| `KAKAO_REST_API_KEY` / `KAKAO_CLIENT_SECRET` / `KAKAO_REDIRECT_URI` / `KAKAO_REFRESH_TOKEN_*` | 리포트 완료 카카오톡 알림. 설정 방법은 아래 "카카오톡 알림 설정" 참고 |
+| `NEXT_PUBLIC_BASE_URL` | 이메일·카카오 메시지에 넣을 웹페이지 기본 URL (실제 배포 도메인이어야 링크가 열린다) |
 | `CRON_SECRET` | `/api/cron/generate-report` 인증용 (Vercel이 자동 주입하는 값을 그대로 써도 됨) |
 
 ## 로컬 개발
@@ -65,24 +69,43 @@ npm run dev
 로컬에 Postgres가 없다면 Docker로 하나 띄우거나(`docker run -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres`),
 Neon/Vercel Postgres의 무료 티어를 바로 써도 된다.
 
-## 재료 판단 로컬 테스트 (Ollama)
+## 재료 판단 모델 (Gemini 기본)
 
-`ANTHROPIC_API_KEY` 없이 전략1 로직을 테스트하고 싶을 때는 로컬 LLM으로 대체할 수 있다.
+로컬/운영 모두 `MATERIAL_JUDGE_PROVIDER="gemini"`를 기본값으로 쓴다. 무료 티어라
+비용이 없고, Anthropic과 달리 로컬 개발과 Vercel 운영 양쪽에서 동일하게 동작한다
+(Ollama는 로컬 서버라 Vercel 같은 클라우드 환경에서는 애초에 접근이 불가능하다).
+키는 https://aistudio.google.com/apikey 에서 신용카드 등록 없이 무료로 발급받는다.
+
+주의할 점:
+
+- Gemini는 모델 세대 교체가 잦다. 코드 기본값(`gemini-3.5-flash`)이 지원 종료되면
+  `GEMINI_API_KEY`로 `GET https://generativelanguage.googleapis.com/v1beta/models?key=...`를
+  호출해 사용 가능한 모델 목록을 확인하고 `GEMINI_MODEL` 환경변수로 교체한다.
+- 무료 티어는 가끔 일시적으로 503("high demand")을 반환한다. `materialJudge.ts`의
+  `completeWithGemini`가 503에 한해 최대 2회 자동 재시도하므로 리포트 실행 자체가
+  깨지지는 않지만, 완전히 없어지지는 않는 특성이니 참고한다.
+
+### Anthropic(Claude)으로 전환하려면
+
+`MATERIAL_JUDGE_PROVIDER="anthropic"` + `ANTHROPIC_API_KEY`로 바꾸면 된다. Gemini보다
+한국어 판단 품질이 살짝 더 안정적일 수 있으나 유료다.
+
+### 완전 오프라인 로컬 테스트 (Ollama)
+
+인터넷 연결 없이 전략1 로직만 테스트하고 싶을 때 쓴다. 운영에는 쓸 수 없다(로컬
+서버라 Vercel에서 접근 불가).
 
 ```bash
 winget install Ollama.Ollama   # 최초 1회 설치
 ollama pull llama3.1:8b        # 최초 1회 모델 다운로드 (약 4.9GB)
 ```
 
-`.env`에서 `MATERIAL_JUDGE_PROVIDER="ollama"`로 설정하면 된다(로컬 개발용 기본값).
-실제 비교 테스트 결과: `qwen2.5:7b`는 뉴스/공시 원문이 여러 건 주어지면 요청한 JSON
-스키마를 무시하거나(`{"재료": [...]}` 같은 임의 형식), 횡령·배임 혐의처럼 명백한
-악재도 "재료 없음"으로 놓치는 등 판단 품질이 낮았다. `llama3.1:8b`는 같은 입력에서
-정확한 판단(`verdict: "negative"`, 근거 요약, 관련 없는 공시 제외)을 냈다 — 로컬로
-테스트할 거면 `llama3.1:8b`를 권장한다. 둘 다 VRAM이 작은 GPU(예: 6GB)에서는 일부가
-CPU로 오프로드되어 느리다(종목당 수십 초). 그래도 Claude 대비 품질은 떨어질 수 있어
-운영 배포 시에는 반드시 `MATERIAL_JUDGE_PROVIDER="anthropic"` + `ANTHROPIC_API_KEY`로
-전환한다.
+`.env`에서 `MATERIAL_JUDGE_PROVIDER="ollama"`로 설정한다. 실제 비교 테스트 결과:
+`qwen2.5:7b`는 뉴스/공시 원문이 여러 건 주어지면 요청한 JSON 스키마를 무시하거나
+(`{"재료": [...]}` 같은 임의 형식), 횡령·배임 혐의처럼 명백한 악재도 "재료 없음"으로
+놓치는 등 판단 품질이 낮았다. `llama3.1:8b`는 같은 입력에서 정확한 판단
+(`verdict: "negative"`, 근거 요약, 관련 없는 공시 제외)을 냈다 — 그래도 Gemini/Claude
+대비 품질은 떨어질 수 있다.
 
 ## 리포트 생성 실행 방법
 
@@ -90,6 +113,37 @@ CPU로 오프로드되어 느리다(종목당 수십 초). 그래도 Claude 대�
   마감 후 20:00 이전)에 `/api/cron/generate-report`를 호출한다.
 - **수동**: 로그인 후 대시보드의 "리포트 재생성" 버튼, 또는
   `POST /api/reports/regenerate` 직접 호출.
+
+## 카카오톡 알림 설정
+
+리포트 생성이 끝나면 등록된 수신자 전원에게 카카오톡 "나에게 보내기"로 알림을
+보낸다(`src/lib/dataSources/kakao.ts`). "친구에게 보내기"가 아니라 각자 자기
+자신에게 보내는 방식이라, 카카오 친구 목록 연동이나 정식 앱 심사 없이 쓸 수 있다.
+발송이 실패해도 리포트 생성 자체는 실패하지 않는다(로그만 남기고 넘어간다).
+
+1. https://developers.kakao.com 에서 앱을 만들고 "카카오 로그인"을 활성화한 뒤,
+   플랫폼(Web)에 배포 도메인을 등록한다.
+   - **"제품 링크 관리 > 웹 도메인"에도 배포 도메인을 등록해야 한다.** 이걸 빼먹으면
+     카카오톡 메시지의 버튼은 보이는데 눌러도 링크가 안 열리는 증상이 생긴다.
+   - 리다이렉트 URI는 `<배포 도메인>/api/kakao/oauth-callback`으로 등록한다
+     (`KAKAO_REDIRECT_URI`와 정확히 일치해야 한다).
+   - "카카오 로그인 > 보안"에서 클라이언트 시크릿을 켰다면 `KAKAO_CLIENT_SECRET`도
+     반드시 채워야 한다. 안 채우면 토큰 발급이 `KOE010 Bad client credentials`로
+     실패한다.
+2. 수신자를 늘리려면(가족 등) 카카오 개발자 콘솔의 "팀 관리"에서 그 사람 이메일을
+   Viewer로 초대한다. 휴면 카카오 계정은 초대 메일을 못 받을 수 있으니, 카카오
+   앱/웹에 한 번 로그인해 휴면 해제부터 시키는 게 먼저다.
+3. 수신자마다 아래 링크를 열어 "카카오톡 메시지 전송" 항목에 동의하게 한다
+   (`state` 값은 수신자 구분용 라벨, 아무 문자열이나 가능):
+   ```
+   https://kauth.kakao.com/oauth/authorize?client_id=<KAKAO_REST_API_KEY>&redirect_uri=<KAKAO_REDIRECT_URI>&response_type=code&scope=talk_message&state=<라벨>
+   ```
+4. 동의가 끝나면 `/api/kakao/oauth-callback` 페이지에 refresh_token이 표시된다.
+   그 값을 `KAKAO_REFRESH_TOKEN_<라벨>` 환경변수로 로컬 `.env`와 Vercel 양쪽에
+   등록한다. 새 수신자를 추가했다면 `notifyAllKakaoRecipients`(`kakao.ts`)의
+   `recipients` 배열에도 항목을 추가해야 한다.
+5. 리프레시 토큰은 발급 후 약 2개월간 유효하다. 카카오 개발자 콘솔에서
+   "리프레시 토큰 자동 연장"을 켜두면 사용할 때마다 만료일이 늘어난다.
 
 ## 재료 판단 기준 수정
 
@@ -101,6 +155,20 @@ CPU로 오프로드되어 느리다(종목당 수십 초). 그래도 Claude 대�
 
 `/settings` 페이지에서 전략별 숫자 파라미터(거래량 배수, 이동평균 기간 등)를
 조정할 수 있다. 저장 즉시 다음 실행부터 반영된다 (DESIGN.md §8).
+
+## 종목 상세 차트
+
+`/stock/[code]`는 일봉 캔들차트 아래에 거래량 히스토그램을 함께 보여준다
+(`src/components/CandleChart.tsx`, lightweight-charts v5의 별도 `HistogramSeries` +
+`scaleMargins`로 두 영역을 분리). 마커는 두 종류다:
+
+- **주황 화살표**: 이 종목이 각 전략의 최종 추천 목록에 포함됐던 모든 날짜
+  (`/api/stock/[code]/candles`가 DB의 `isFinal` 스텝 픽을 조회해서 계산).
+- **초록 화살표("추천시점")**: 히스토리/대시보드에서 종목을 클릭해 들어온 그
+  특정 날짜. `StockTable`이 링크에 `?date=YYYY-MM-DD`를 붙이고, 페이지가
+  `useSearchParams`로 읽어 `CandleChart`의 `highlightDate`로 넘긴다. 최종 추천이
+  아닌 단계(예: 전략1 2단계의 호재/악재/중립 전체 목록)에서 클릭해도 표시된다 —
+  DB 조회 없이 클릭 시점의 날짜를 그대로 쓰기 때문이다.
 
 ## 설계상 주요 가정 (DESIGN.md에 명시되지 않아 구현 시 채택한 결정)
 
@@ -120,13 +188,21 @@ CPU로 오프로드되어 느리다(종목당 수십 초). 그래도 Claude 대�
 4. `vercel.json`의 Cron이 자동으로 등록된다.
 5. Vercel 프로젝트 설정에서 `CRON_SECRET`을 등록하면 Vercel이 Cron 요청에
    자동으로 `Authorization: Bearer $CRON_SECRET` 헤더를 붙인다.
+6. `vercel.json`에 `"regions": ["icn1"]`(서울)이 지정되어 있다. 네이버/DART API가
+   전부 한국 서버라, 기본 리전(미국 동부 iad1)에서 실행하면 API 호출마다 태평양
+   왕복 지연이 누적돼 리포트 생성이 4분 이상 걸린다(서울 리전에서는 30~40초).
+   **이 설정을 지우지 말 것.**
+7. Vercel에 새 환경변수를 추가/변경한 뒤에는 반드시 재배포해야 반영된다(기존에
+   떠 있는 배포는 그대로 예전 값을 쓴다). `NEXT_PUBLIC_*` 변수는 빌드 시점에
+   번들에 박히므로 특히 더 그렇다.
 
 ## 알려진 제약
 
 - 리포트 생성 API(`/api/cron/generate-report`, `/api/reports/regenerate`)는
   `maxDuration: 300`(초)로 설정되어 있다. Vercel Hobby 플랜은 함수 실행 시간
   제한이 더 짧을 수 있으므로, 종목 수가 많아 300초 근처까지 걸린다면 Pro
-  플랜 이상이 필요할 수 있다.
+  플랜 이상이 필요할 수 있다. (서울 리전 적용 후에는 보통 40초 내외로 끝나
+  여유가 크다.)
 
 ## 알려진 TODO
 

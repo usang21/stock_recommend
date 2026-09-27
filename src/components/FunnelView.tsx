@@ -36,7 +36,7 @@ function sortByVerdict(picks: PickRow[]): PickRow[] {
   );
 }
 
-export function FunnelView({ result }: { result: StrategyResultData }) {
+export function FunnelView({ result, reportDate }: { result: StrategyResultData; reportDate?: string }) {
   const [expanded, setExpanded] = useState(false);
   const finalStep = result.steps.find((s) => s.isFinal) ?? result.steps[result.steps.length - 1];
   const priorSteps = result.steps.filter((s) => s !== finalStep);
@@ -63,6 +63,7 @@ export function FunnelView({ result }: { result: StrategyResultData }) {
         picks={finalStep.picks}
         showMaterial={isStrategy1}
         showInstitutional={hasInstitutionalInfo(finalStep.picks)}
+        reportDate={reportDate}
       />
 
       {priorSteps.length > 0 && (
@@ -86,6 +87,7 @@ export function FunnelView({ result }: { result: StrategyResultData }) {
                       picks={hasMaterialVerdicts(step.picks) ? sortByVerdict(step.picks) : step.picks}
                       showMaterial={hasMaterialVerdicts(step.picks)}
                       showInstitutional={hasInstitutionalInfo(step.picks)}
+                      reportDate={reportDate}
                     />
                   </div>
                 ))}

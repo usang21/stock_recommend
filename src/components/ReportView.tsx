@@ -63,7 +63,7 @@ export function ReportView({ date, activeTab }: { date: string; activeTab: Strat
         </pre>
       )}
       {strategyResult ? (
-        <FunnelView result={strategyResult} />
+        <FunnelView result={strategyResult} reportDate={report.runDate} />
       ) : (
         <p className="py-8 text-center text-sm text-neutral-500">{label} 결과가 없습니다.</p>
       )}
