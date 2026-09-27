@@ -174,6 +174,14 @@ export async function getInstitutionalTrend(code: string, days = 15): Promise<Na
   );
 }
 
+/** 종목코드로 종목명을 조회한다 (종목 상세 페이지 제목 등에 사용). */
+export async function getStockName(code: string): Promise<string | null> {
+  const data = await getJson<{ datas?: { itemCode: string; stockName: string }[] }>(
+    `${STOCK_API_BASE}/polling/domestic/stock?itemCodes=${code}`
+  );
+  return data.datas?.[0]?.stockName ?? null;
+}
+
 /** 일봉 캔들 1건. */
 export interface Candle {
   date: string; // YYYYMMDD
@@ -183,6 +191,12 @@ export interface Candle {
   close: number;
   volume: number;
 }
+
+export type Timeframe = "day" | "week" | "month";
+
+// timeframe별 캔들 1개가 차지하는 평균 달력일 수(휴장일 감안 여유 포함) — 원하는
+// 캔들 개수(count)만큼 확보하려면 대략 며칠 전부터 조회해야 하는지 역산하는 데 쓴다.
+const CALENDAR_DAYS_PER_BAR: Record<Timeframe, number> = { day: 2.2, week: 8, month: 32 };
 
 function parseSiseJson(raw: string): Candle[] {
   // 응답이 JS 배열 리터럴 텍스트로 온다 (JSON이 아님): [['날짜',...], ["20260901", 100, ...], ...]
@@ -200,30 +214,29 @@ function parseSiseJson(raw: string): Candle[] {
     }));
 }
 
-async function getSiseJsonCandles(symbol: string, days: number): Promise<Candle[]> {
+async function getSiseJsonCandles(symbol: string, count: number, timeframe: Timeframe): Promise<Candle[]> {
   const end = new Date();
   const start = new Date();
-  // 넉넉히 달력일 기준 days*2.2배 이전부터 조회 (휴장일 감안)
-  start.setDate(start.getDate() - Math.ceil(days * 2.2));
+  start.setDate(start.getDate() - Math.ceil(count * CALENDAR_DAYS_PER_BAR[timeframe]));
   const fmt = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
   const url = `${LEGACY_CHART_BASE}/siseJson.naver?symbol=${symbol}&requestType=1&startTime=${fmt(
     start
-  )}&endTime=${fmt(end)}&timeframe=day`;
+  )}&endTime=${fmt(end)}&timeframe=${timeframe}`;
   const res = await fetch(url, { headers: COMMON_HEADERS, cache: "no-store" });
   if (!res.ok) throw new Error(`네이버 캔들 API 호출 실패 (${res.status}): ${symbol}`);
   const raw = await res.text();
   const candles = parseSiseJson(raw);
-  return candles.slice(-days);
+  return candles.slice(-count);
 }
 
-/** 종목 일봉 (최근 N개). */
-export async function getStockCandles(code: string, days = 90): Promise<Candle[]> {
-  return getSiseJsonCandles(code, days);
+/** 종목 캔들 (최근 N개). timeframe으로 일봉/주봉/월봉을 전환한다(네이버 API가 직접 집계해서 준다). */
+export async function getStockCandles(code: string, count = 90, timeframe: Timeframe = "day"): Promise<Candle[]> {
+  return getSiseJsonCandles(code, count, timeframe);
 }
 
 /** 지수 일봉 (KOSPI | KOSDAQ). */
 export async function getIndexCandles(index: "KOSPI" | "KOSDAQ", days = 90): Promise<Candle[]> {
-  return getSiseJsonCandles(index, days);
+  return getSiseJsonCandles(index, days, "day");
 }
 
 export function toStockQuote(row: NaverStockRow) {

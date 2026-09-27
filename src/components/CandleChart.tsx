@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, CandlestickSeries, HistogramSeries, createSeriesMarkers, type Time } from "lightweight-charts";
+import {
+  createChart,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  createSeriesMarkers,
+  type Time,
+} from "lightweight-charts";
 
 export interface CandleChartData {
   date: string; // YYYYMMDD
@@ -26,7 +33,26 @@ const STRATEGY_LABEL: Record<string, string> = {
   strategy1: "전략1",
   strategy2: "전략2",
   strategy3: "전략3",
+  strategy4: "전략4",
 };
+
+const MA_PERIODS = [
+  { period: 5, color: "#f97316" },
+  { period: 10, color: "#3b82f6" },
+  { period: 20, color: "#a855f7" },
+  { period: 60, color: "#22c55e" },
+] as const;
+
+function computeSMA(candles: CandleChartData[], period: number): { time: Time; value: number }[] {
+  const result: { time: Time; value: number }[] = [];
+  let sum = 0;
+  for (let i = 0; i < candles.length; i++) {
+    sum += candles[i].close;
+    if (i >= period) sum -= candles[i - period].close;
+    if (i >= period - 1) result.push({ time: toTime(candles[i].date), value: sum / period });
+  }
+  return result;
+}
 
 export function CandleChart({
   candles,
@@ -76,6 +102,17 @@ export function CandleChart({
       }))
     );
 
+    for (const { period, color } of MA_PERIODS) {
+      const maSeries = chart.addSeries(LineSeries, {
+        color,
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      maSeries.setData(computeSMA(candles, period));
+    }
+
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
@@ -122,5 +159,17 @@ export function CandleChart({
     return () => chart.remove();
   }, [candles, markers, highlightDate]);
 
-  return <div ref={containerRef} className="h-96 w-full" />;
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap gap-3 text-xs text-neutral-500">
+        {MA_PERIODS.map(({ period, color }) => (
+          <span key={period} className="flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+            {period}선
+          </span>
+        ))}
+      </div>
+      <div ref={containerRef} className="h-96 w-full" />
+    </div>
+  );
 }
