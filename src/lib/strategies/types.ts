@@ -1,3 +1,5 @@
+import type { StrategyKey } from "./defaultParams";
+
 export interface StockQuote {
   code: string;
   name: string;
@@ -49,7 +51,7 @@ export interface FunnelStepResult {
 }
 
 export interface StrategyRunResult {
-  strategyKey: "strategy1" | "strategy2" | "strategy3";
+  strategyKey: StrategyKey;
   strategyName: string;
   paramsSnapshot: Record<string, unknown>;
   steps: FunnelStepResult[];

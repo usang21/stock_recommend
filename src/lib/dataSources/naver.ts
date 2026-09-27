@@ -97,6 +97,11 @@ export async function getHigh52WeekRanking(pageSize = 100): Promise<NaverStockRo
   return fetchRanking("high52week", { pageSize });
 }
 
+/** 거래량 상위 랭킹 (전략4 후보군 산출용). "급증률"이 아니라 당일 거래량 절대치 순위다. */
+export async function getVolumeTopRanking(pageSize = 100): Promise<NaverStockRow[]> {
+  return fetchRanking("quantTop", { pageSize });
+}
+
 /** 관리종목 목록 (유니버스 제외용, DESIGN.md §5). */
 export async function getManagementStocks(): Promise<NaverStockRow[]> {
   return fetchRanking("statusTag", { pageSize: 200 });

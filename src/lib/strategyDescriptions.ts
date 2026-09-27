@@ -27,4 +27,12 @@ export const STRATEGY_DESCRIPTIONS: Record<StrategyTabKey, { title: string; step
       "기관수급 기준 충족 + 상승추세(이동평균선 위)인 종목만 최종 선정",
     ],
   },
+  strategy4: {
+    title: "주봉 5이평선 돌파 + 거래량 + 20일선 상회",
+    steps: [
+      "거래량 상위 종목 중 주봉 5주 이동평균선을 이번 주 상향 돌파",
+      "최근 3거래일 평균 거래량 또는 거래대금이 일정 수준 이상",
+      "현재가가 20일 이동평균선 위인 종목만 최종 선정",
+    ],
+  },
 };

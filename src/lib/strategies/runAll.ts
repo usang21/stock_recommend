@@ -4,10 +4,12 @@ import { notifyAllKakaoRecipients } from "@/lib/dataSources/kakao";
 import { runStrategy1 } from "./strategy1";
 import { runStrategy2 } from "./strategy2";
 import { runStrategy3 } from "./strategy3";
+import { runStrategy4 } from "./strategy4";
 import {
   DEFAULT_STRATEGY1_PARAMS,
   DEFAULT_STRATEGY2_PARAMS,
   DEFAULT_STRATEGY3_PARAMS,
+  DEFAULT_STRATEGY4_PARAMS,
   STRATEGY_DEFS,
   type StrategyKey,
 } from "./defaultParams";
@@ -97,11 +99,13 @@ export async function generateDailyReport(): Promise<{ reportRunId: string; stat
   const params1 = await loadParams("strategy1", DEFAULT_STRATEGY1_PARAMS);
   const params2 = await loadParams("strategy2", DEFAULT_STRATEGY2_PARAMS);
   const params3 = await loadParams("strategy3", DEFAULT_STRATEGY3_PARAMS);
+  const params4 = await loadParams("strategy4", DEFAULT_STRATEGY4_PARAMS);
 
   const runners: [StrategyKey, () => Promise<StrategyRunResult>][] = [
     ["strategy1", () => runStrategy1(params1)],
     ["strategy2", () => runStrategy2(params2)],
     ["strategy3", () => runStrategy3(params3)],
+    ["strategy4", () => runStrategy4(params4)],
   ];
 
   const errors: string[] = [];

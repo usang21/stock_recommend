@@ -36,6 +36,19 @@ export interface Strategy3Params {
   maPeriod: number;
 }
 
+export interface Strategy4Params {
+  /** 주봉 이동평균 기간(주) */
+  weeklyMaPeriod: number;
+  /** 최근 N거래일 평균 거래량/거래대금 조건 계산 기간(일) */
+  volumeAvgDays: number;
+  /** 거래량 절대치 필터 (주). minTradingValue와 OR 조건. */
+  minVolume: number;
+  /** 거래대금 절대치 필터 (원). minVolume과 OR 조건. */
+  minTradingValue: number;
+  /** 현재가와 비교할 이동평균 기간(일) */
+  maPeriod: number;
+}
+
 export const DEFAULT_STRATEGY1_PARAMS: Strategy1Params = {
   minVolume: 10_000_000,
   minTradingValue: 200_000_000_000,
@@ -60,10 +73,19 @@ export const DEFAULT_STRATEGY3_PARAMS: Strategy3Params = {
   maPeriod: 5,
 };
 
+export const DEFAULT_STRATEGY4_PARAMS: Strategy4Params = {
+  weeklyMaPeriod: 5,
+  volumeAvgDays: 3,
+  minVolume: 10_000_000,
+  minTradingValue: 200_000_000_000,
+  maPeriod: 20,
+};
+
 export const STRATEGY_DEFS = {
   strategy1: { name: "상한가 + 재료 + 거래량", defaults: DEFAULT_STRATEGY1_PARAMS },
   strategy2: { name: "강세장 + 테마 + 장대양봉 + 이격도", defaults: DEFAULT_STRATEGY2_PARAMS },
   strategy3: { name: "거래량 급증 + 신고가 + 기관수급 + 상승추세", defaults: DEFAULT_STRATEGY3_PARAMS },
+  strategy4: { name: "주봉 5이평선 돌파 + 거래량 + 20일선 상회", defaults: DEFAULT_STRATEGY4_PARAMS },
 } as const;
 
 export type StrategyKey = keyof typeof STRATEGY_DEFS;
