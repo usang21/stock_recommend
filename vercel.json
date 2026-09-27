@@ -1,0 +1,9 @@
+{
+  "regions": ["icn1"],
+  "crons": [
+    {
+      "path": "/api/cron/generate-report",
+      "schedule": "0 9 * * 1-5"
+    }
+  ]
+}

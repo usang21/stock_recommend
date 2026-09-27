@@ -1,0 +1,92 @@
+// 데일리 트레이딩 종목 스크리너 — DB 스키마
+// 설계 근거: DESIGN.md §3(전략/퍼널), §6(단계별 결과 노출), §9(1개월 보관)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 하루치 리포트 생성 1건 (전략 1~3 전체를 묶는 실행 단위)
+model ReportRun {
+  id        String   @id @default(cuid())
+  runDate   DateTime @db.Date // 이 리포트가 대상으로 하는 거래일
+  status    String   @default("running") // running | success | partial | failed
+  errorMessage String?
+  createdAt DateTime @default(now())
+
+  strategyResults StrategyResult[]
+
+  @@unique([runDate])
+  @@index([runDate])
+}
+
+// 리포트 실행 내 전략 1건의 결과 (퍼널 전체)
+model StrategyResult {
+  id          String   @id @default(cuid())
+  reportRunId String
+  reportRun   ReportRun @relation(fields: [reportRunId], references: [id], onDelete: Cascade)
+  strategyKey String // "strategy1" | "strategy2" | "strategy3"
+  strategyName String
+  paramsSnapshot Json // 실행 당시 사용된 파라미터 스냅샷
+
+  steps FunnelStep[]
+
+  @@index([reportRunId])
+}
+
+// 퍼널의 각 단계 (예: 1단계 30종목 -> 2단계 4종목 ...)
+model FunnelStep {
+  id               String   @id @default(cuid())
+  strategyResultId String
+  strategyResult   StrategyResult @relation(fields: [strategyResultId], references: [id], onDelete: Cascade)
+  stepIndex        Int
+  stepName         String
+  isFinal          Boolean  @default(false)
+
+  picks StockPick[]
+
+  @@index([strategyResultId])
+}
+
+// 각 단계를 통과한 종목
+model StockPick {
+  id           String   @id @default(cuid())
+  funnelStepId String
+  funnelStep   FunnelStep @relation(fields: [funnelStepId], references: [id], onDelete: Cascade)
+
+  stockCode    String
+  stockName    String
+  price        Int?
+  changeRate   Float?
+  volume       BigInt?
+  tradingValue BigInt?
+
+  // 전략1 전용: 재료(뉴스/공시) 판단 결과
+  materialVerdict String? // "positive" | "negative" | "none"
+  materialSummary String?
+  materialSources Json?   // [{ title, url, type: "news" | "disclosure", publishedAt }]
+
+  // 전략3 전용: 최근 N거래일 기관/외국인 수급 현황
+  institutionalMeetsThreshold Boolean?
+  institutionalBuyDaysCount   Int?
+  institutionalWindowDays     Int?
+  institutionalMinBuyDays     Int?
+  institutionalDays           Json? // [{ date, organNetBuy, foreignerNetBuy }]
+
+  // 전략3 전용: 어떤 기준으로 신고가 조건을 통과했는지
+  newHighLabel String? // "20일 신고가" | "60일 신고가" | "52주 신고가" | "역사적 신고가"
+
+  @@index([funnelStepId])
+  @@index([stockCode])
+}
+
+// 전략별 조정 가능한 숫자 파라미터 (§8)
+model StrategyParams {
+  id          String   @id @default(cuid())
+  strategyKey String   @unique
+  paramsJson  Json
+  updatedAt   DateTime @updatedAt
+}

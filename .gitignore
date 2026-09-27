@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+# Claude Code local tooling state (installed skills cache, session locks)
+.agents/
+.claude/
+skills-lock.json
