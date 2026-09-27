@@ -24,6 +24,8 @@ const FIELD_LABELS: Record<string, string> = {
   volumeSurgeLookbackDays: "거래량 급증 탐색 기간(일)",
   institutionalWindowDays: "기관수급 판정 기준 기간(일)",
   institutionalMinBuyDays: "기관수급 최소 순매수 일수",
+  weeklyMaPeriod: "주봉 이동평균 기간(주)",
+  volumeAvgDays: "거래량/거래대금 평균 계산 기간(일)",
 };
 
 function StrategySettingForm({ setting, onSaved }: { setting: StrategySetting; onSaved: () => void }) {
