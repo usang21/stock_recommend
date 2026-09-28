@@ -32,7 +32,7 @@ export async function runStrategy3(params: Strategy3Params): Promise<StrategyRun
     const candles = await getStockCandles(
       row.itemcode,
       params.volumeBaselinePeriod + params.volumeSurgeLookbackDays + 5
-    );
+    ).catch(() => []);
     candlesByCode.set(row.itemcode, candles);
     const surged = hasVolumeSurge(
       candles,
@@ -51,7 +51,7 @@ export async function runStrategy3(params: Strategy3Params): Promise<StrategyRun
 
     let midCandles = candlesByCode.get(pick.code);
     if (!midCandles || midCandles.length < MID_HIGH_LOOKBACK_DAYS) {
-      midCandles = await getStockCandles(pick.code, MID_HIGH_LOOKBACK_DAYS + 5);
+      midCandles = await getStockCandles(pick.code, MID_HIGH_LOOKBACK_DAYS + 5).catch(() => []);
       candlesByCode.set(pick.code, midCandles);
     }
 
@@ -63,7 +63,7 @@ export async function runStrategy3(params: Strategy3Params): Promise<StrategyRun
     } else if (Number(row.nowPrice) >= Number(row.week52HighPrice)) {
       newHighLabel = "52주 신고가";
     } else {
-      const longCandles = await getStockCandles(pick.code, ALL_TIME_HIGH_LOOKBACK_DAYS);
+      const longCandles = await getStockCandles(pick.code, ALL_TIME_HIGH_LOOKBACK_DAYS).catch(() => []);
       if (isHighInRange(longCandles)) newHighLabel = "역사적 신고가";
     }
 
@@ -97,7 +97,7 @@ export async function runStrategy3(params: Strategy3Params): Promise<StrategyRun
 
   const step4Checked = await mapWithConcurrency(step3Picks, FETCH_CONCURRENCY, async (pick) => {
     if (!pick.institutional?.meetsThreshold) return null;
-    const candles = candlesByCode.get(pick.code) ?? (await getStockCandles(pick.code, params.maPeriod + 5));
+    const candles = candlesByCode.get(pick.code) ?? (await getStockCandles(pick.code, params.maPeriod + 5).catch(() => []));
     return isUpTrend(candles, params.maPeriod) ? pick : null;
   });
   const step4Picks: PickWithMaterial[] = step4Checked.filter((p): p is PickWithMaterial => p != null);

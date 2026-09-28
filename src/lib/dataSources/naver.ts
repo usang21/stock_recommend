@@ -134,8 +134,9 @@ export interface NaverThemeRow {
 }
 
 export async function getThemeList(): Promise<NaverThemeRow[]> {
+  // pageSize 최대값이 200이다(그 이상은 400 에러). 2026-09-28 실제 확인.
   return getJson<NaverThemeRow[]>(
-    `${STOCK_API_BASE}/domestic/market/theme/list?startIdx=0&pageSize=300&sortType=changeRate`
+    `${STOCK_API_BASE}/domestic/market/theme/list?startIdx=0&pageSize=200&sortType=changeRate`
   );
 }
 
@@ -200,7 +201,10 @@ const CALENDAR_DAYS_PER_BAR: Record<Timeframe, number> = { day: 2.2, week: 8, mo
 
 function parseSiseJson(raw: string): Candle[] {
   // 응답이 JS 배열 리터럴 텍스트로 온다 (JSON이 아님): [['날짜',...], ["20260901", 100, ...], ...]
-  const rows = JSON.parse(raw.replace(/'/g, '"')) as (string | number)[][];
+  // 일부 종목/기간 조합에서 행 끝에 후행 콤마(",]")가 섞여 와 JSON.parse가 실패하는
+  // 사례가 실제로 확인되어(2026-09-28), 파싱 전에 후행 콤마를 제거해 방어한다.
+  const cleaned = raw.replace(/'/g, '"').replace(/,(\s*[\]}])/g, "$1");
+  const rows = JSON.parse(cleaned) as (string | number)[][];
   return rows
     .slice(1)
     .filter((r) => Array.isArray(r) && r.length >= 6)

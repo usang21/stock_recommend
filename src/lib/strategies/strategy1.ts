@@ -3,9 +3,17 @@ import { buildExcludedUniverse, filterUniverse } from "./universe";
 import { judgeMaterial } from "./materialJudge";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import type { Strategy1Params } from "./defaultParams";
-import type { FunnelStepResult, PickWithMaterial, StrategyRunResult } from "./types";
+import type { FunnelStepResult, MaterialInfo, PickWithMaterial, StrategyRunResult } from "./types";
 
-const MATERIAL_JUDGE_CONCURRENCY = 4;
+// Gemini 무료 티어가 분당 5회로 제한돼 있어 직렬로(1개씩) 처리한다 — 동시에 여러 건을
+// 쏘면 바로 429(RESOURCE_EXHAUSTED)에 걸린다. completeWithGemini 쪽에서 429도
+// 재시도하지만, 애초에 동시 요청을 줄이는 쪽이 더 안정적이다.
+const MATERIAL_JUDGE_CONCURRENCY = 1;
+
+// Vercel 함수 전체 제한(300초) 안에서 전략2~4도 실행돼야 하므로, 재료 판단에는
+// 이 시간까지만 쓴다. 상한가 종목이 아주 많은 날 예산을 넘기면, 남은 종목은
+// Gemini를 호출하지 않고 바로 "직접 확인 필요"로 표시해 예산을 지킨다.
+const MATERIAL_JUDGE_TIME_BUDGET_MS = 220_000;
 
 /**
  * 전략1 — 상한가 + 재료 + 거래량 (DESIGN.md §3).
@@ -22,10 +30,27 @@ export async function runStrategy1(params: Strategy1Params): Promise<StrategyRun
   const step1Rows = filterUniverse(rawUpperLimit, universe);
   const step1Picks: PickWithMaterial[] = step1Rows.map(toStockQuote);
 
-  const judged = await mapWithConcurrency(step1Picks, MATERIAL_JUDGE_CONCURRENCY, async (pick) => ({
-    pick,
-    material: await judgeMaterial(pick.code, pick.name),
-  }));
+  const judgeDeadline = Date.now() + MATERIAL_JUDGE_TIME_BUDGET_MS;
+  const judged = await mapWithConcurrency(step1Picks, MATERIAL_JUDGE_CONCURRENCY, async (pick) => {
+    let material: MaterialInfo;
+    if (Date.now() > judgeDeadline) {
+      material = {
+        verdict: "positive",
+        summary: "재료 판단 실패 — 직접 확인 필요 (시간 예산 초과로 건너뜀)",
+        sources: [],
+      };
+    } else {
+      try {
+        material = await judgeMaterial(pick.code, pick.name);
+      } catch (err) {
+        // 한 종목의 판단 실패(API 한도, 일시 장애 등)가 전략 전체를 실패시키지 않도록,
+        // 사람이 직접 확인하도록 안전하게 "재료 있음"으로 표시하고 계속 진행한다.
+        const message = err instanceof Error ? err.message : String(err);
+        material = { verdict: "positive", summary: `재료 판단 실패 — 직접 확인 필요 (${message})`, sources: [] };
+      }
+    }
+    return { pick, material };
+  });
   const step2Picks: PickWithMaterial[] = judged.map((j) => ({ ...j.pick, material: j.material }));
 
   const step3Picks = step2Picks.filter(

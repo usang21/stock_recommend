@@ -28,10 +28,15 @@ export default function StockPage({ params }: { params: Promise<{ code: string }
   const highlightDate = searchParams.get("date") ?? undefined;
 
   useEffect(() => {
-    setData(null);
+    let cancelled = false;
     fetch(`/api/stock/${code}/candles?timeframe=${timeframe}`)
       .then((res) => res.json())
-      .then(setData);
+      .then((json) => {
+        if (!cancelled) setData(json);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [code, timeframe]);
 
   return (

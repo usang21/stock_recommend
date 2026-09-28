@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/generate-report",
-      "schedule": "0 9 * * 1-5"
+      "schedule": "0 7 * * 1-5"
     }
   ]
 }

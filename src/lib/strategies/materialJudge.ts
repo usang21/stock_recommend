@@ -80,17 +80,46 @@ async function callGeminiOnce(model: string, apiKey: string, systemPrompt: strin
   });
 }
 
+/** 429 응답의 RetryInfo에 담긴 "56s" 같은 권장 대기시간(초)을 뽑아낸다. 없으면 null. */
+function extractRetryDelaySeconds(data: unknown): number | null {
+  const details = (data as { error?: { details?: { "@type"?: string; retryDelay?: string }[] } })?.error?.details;
+  const retryInfo = details?.find((d) => d["@type"]?.includes("RetryInfo"));
+  const match = retryInfo?.retryDelay?.match(/^(\d+(?:\.\d+)?)s$/);
+  return match ? Number(match[1]) : null;
+}
+
+// 무료 티어 분당 5회 제한을 아예 넘기지 않도록, 호출 시작 전에 이전 호출과
+// 최소 간격을 강제로 확보한다(429가 나고서야 대기하는 것보다 훨씬 빠르고 예측
+// 가능하다). strategy1이 MATERIAL_JUDGE_CONCURRENCY=1로 직렬 호출하는 것과
+// 짝을 이룬다.
+const MIN_GEMINI_INTERVAL_MS = 15_000;
+let lastGeminiCallAt = 0;
+
 async function completeWithGemini(systemPrompt: string, userPrompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.");
   const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
-  let res = await callGeminiOnce(model, apiKey, systemPrompt, userPrompt);
-  for (let attempt = 0; !res.ok && res.status === 503 && attempt < 2; attempt++) {
-    await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
-    res = await callGeminiOnce(model, apiKey, systemPrompt, userPrompt);
+  const sinceLastCall = Date.now() - lastGeminiCallAt;
+  if (sinceLastCall < MIN_GEMINI_INTERVAL_MS) {
+    await new Promise((r) => setTimeout(r, MIN_GEMINI_INTERVAL_MS - sinceLastCall));
   }
-  const data = await res.json();
+  lastGeminiCallAt = Date.now();
+
+  let res = await callGeminiOnce(model, apiKey, systemPrompt, userPrompt);
+  let data = await res.json();
+  // 503(일시 과부하)은 재시도하면 풀릴 가능성이 있어 조금 더 끈질기게 재시도한다.
+  // 429는 사전 간격 확보가 1차 방어선이라 여기까지 왔다면 대부분 일일 한도
+  // 소진(재시도해도 안 풀림)인 경우라, 짧게 1번만 시도하고 빨리 포기한다
+  // (2026-09-28 실측: 65초씩 재시도해도 일일 한도 초과는 전혀 안 풀렸다).
+  for (let attempt = 0; !res.ok && (res.status === 503 || res.status === 429) && attempt < 3; attempt++) {
+    if (res.status === 429 && attempt >= 1) break;
+    const waitSec = res.status === 429 ? Math.min(extractRetryDelaySeconds(data) ?? 10, 20) : 3 * 2 ** attempt;
+    await new Promise((r) => setTimeout(r, waitSec * 1000));
+    lastGeminiCallAt = Date.now();
+    res = await callGeminiOnce(model, apiKey, systemPrompt, userPrompt);
+    data = await res.json();
+  }
   if (!res.ok) throw new Error(`Gemini 호출 실패: ${JSON.stringify(data)}`);
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
 }

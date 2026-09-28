@@ -7,16 +7,19 @@ export function sma(values: number[], period: number, endIndex: number): number 
   return sum / period;
 }
 
-/** 종가 배열에서 단기선이 장기선을 상향 돌파했는지(골든크로스) 마지막 시점 기준으로 확인. */
+/**
+ * 단기 이동평균선이 장기 이동평균선 위에 있는 상태(골든크로스 이후 지속 여부)인지 확인한다.
+ * 원래는 "크로스가 발생한 바로 그 날"만 true였는데, 이러면 크로스 다음날부터는 강세장이
+ * 계속되고 있어도 매번 false가 나와 전략2가 사실상 항상 "강세장 확인 실패"로 막히는
+ * 문제가 있었다(2026-09-29 실 데이터로 확인). 크로스 이후 단기선이 장기선 위에 머무는
+ * 기간 전체를 강세장으로 보는 쪽이 "강세장 확인" 게이트의 의도에 맞아 이렇게 바꿨다.
+ */
 export function hasGoldenCross(closes: number[], shortPeriod: number, longPeriod: number): boolean {
   const last = closes.length - 1;
-  if (last < longPeriod) return false;
   const shortNow = sma(closes, shortPeriod, last);
   const longNow = sma(closes, longPeriod, last);
-  const shortPrev = sma(closes, shortPeriod, last - 1);
-  const longPrev = sma(closes, longPeriod, last - 1);
-  if (shortNow == null || longNow == null || shortPrev == null || longPrev == null) return false;
-  return shortPrev <= longPrev && shortNow > longNow;
+  if (shortNow == null || longNow == null) return false;
+  return shortNow > longNow;
 }
 
 export function isCloseAboveMA(closes: number[], period: number): boolean {
