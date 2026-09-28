@@ -22,7 +22,7 @@ export async function runStrategy4(params: Strategy4Params): Promise<StrategyRun
 
   const candlesByCode = new Map<string, Awaited<ReturnType<typeof getStockCandles>>>();
   const step1Checked = await mapWithConcurrency(candidateRows, FETCH_CONCURRENCY, async (row) => {
-    const candles = await getStockCandles(row.itemcode, CANDLE_LOOKBACK_DAYS);
+    const candles = await getStockCandles(row.itemcode, CANDLE_LOOKBACK_DAYS).catch(() => []);
     candlesByCode.set(row.itemcode, candles);
     return hasWeeklyMABreakout(candles, params.weeklyMaPeriod) ? toStockQuote(row) : null;
   });

@@ -3,9 +3,12 @@ import { buildExcludedUniverse, filterUniverse } from "./universe";
 import { judgeMaterial } from "./materialJudge";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import type { Strategy1Params } from "./defaultParams";
-import type { FunnelStepResult, PickWithMaterial, StrategyRunResult } from "./types";
+import type { FunnelStepResult, MaterialInfo, PickWithMaterial, StrategyRunResult } from "./types";
 
-const MATERIAL_JUDGE_CONCURRENCY = 4;
+// Gemini 무료 티어가 분당 5회로 제한돼 있어 직렬로(1개씩) 처리한다 — 동시에 여러 건을
+// 쏘면 바로 429(RESOURCE_EXHAUSTED)에 걸린다. completeWithGemini 쪽에서 429도
+// 재시도하지만, 애초에 동시 요청을 줄이는 쪽이 더 안정적이다.
+const MATERIAL_JUDGE_CONCURRENCY = 1;
 
 /**
  * 전략1 — 상한가 + 재료 + 거래량 (DESIGN.md §3).
@@ -22,10 +25,18 @@ export async function runStrategy1(params: Strategy1Params): Promise<StrategyRun
   const step1Rows = filterUniverse(rawUpperLimit, universe);
   const step1Picks: PickWithMaterial[] = step1Rows.map(toStockQuote);
 
-  const judged = await mapWithConcurrency(step1Picks, MATERIAL_JUDGE_CONCURRENCY, async (pick) => ({
-    pick,
-    material: await judgeMaterial(pick.code, pick.name),
-  }));
+  const judged = await mapWithConcurrency(step1Picks, MATERIAL_JUDGE_CONCURRENCY, async (pick) => {
+    let material: MaterialInfo;
+    try {
+      material = await judgeMaterial(pick.code, pick.name);
+    } catch (err) {
+      // 한 종목의 판단 실패(API 한도, 일시 장애 등)가 전략 전체를 실패시키지 않도록,
+      // 사람이 직접 확인하도록 안전하게 "재료 있음"으로 표시하고 계속 진행한다.
+      const message = err instanceof Error ? err.message : String(err);
+      material = { verdict: "positive", summary: `재료 판단 실패 — 직접 확인 필요 (${message})`, sources: [] };
+    }
+    return { pick, material };
+  });
   const step2Picks: PickWithMaterial[] = judged.map((j) => ({ ...j.pick, material: j.material }));
 
   const step3Picks = step2Picks.filter(

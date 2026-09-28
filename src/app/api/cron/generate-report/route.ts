@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateDailyReport } from "@/lib/strategies/runAll";
 
-export const maxDuration = 300; // 스크래핑 + Claude 판단 포함, 넉넉히 설정
+// Gemini 무료 티어 분당 5회 제한 때문에 전략1이 상한가 종목 수 × 약 12.5초로
+// 늘어질 수 있어(2026-09-28 12종목 기준 약 5분40초 실측) 여유를 크게 잡는다.
+export const maxDuration = 800;
 
 /** Vercel Cron이 매일 정규장 마감 후 호출한다 (DESIGN.md §7). vercel.json 참고. */
 export async function GET(request: NextRequest) {

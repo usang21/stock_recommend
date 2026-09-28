@@ -42,7 +42,7 @@ export async function runStrategy2(params: Strategy2Params): Promise<StrategyRun
   const candleLookback = Math.max(params.bigBullishLookbackDays + 5, params.maPeriod + 5, 30);
   const candlesByCode = new Map<string, Awaited<ReturnType<typeof getStockCandles>>>();
   const step2Checked = await mapWithConcurrency(step1Picks, FETCH_CONCURRENCY, async (pick) => {
-    const candles = await getStockCandles(pick.code, candleLookback);
+    const candles = await getStockCandles(pick.code, candleLookback).catch(() => []);
     candlesByCode.set(pick.code, candles);
     return hasBigBullishCandle(candles, params.bigBullishLookbackDays, params.bigBullishCandleMinBodyPct)
       ? pick
