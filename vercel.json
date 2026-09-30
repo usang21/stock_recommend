@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/generate-report",
       "schedule": "0 7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/final-recommendation",
+      "schedule": "30 7 * * 1-5"
     }
   ]
 }

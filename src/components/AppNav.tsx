@@ -15,6 +15,9 @@ export function AppNav() {
           <Link href="/history" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             히스토리
           </Link>
+          <Link href="/recommendation-logic" className="hover:text-neutral-900 dark:hover:text-neutral-100">
+            추천 로직
+          </Link>
           <Link href="/settings" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             설정
           </Link>

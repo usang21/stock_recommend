@@ -1,10 +1,19 @@
 import Link from "next/link";
-import { STRATEGY_TABS, type StrategyTabKey } from "@/lib/strategyMeta";
+import { STRATEGY_TABS } from "@/lib/strategyMeta";
 
-export function StrategyTabs({ basePath, active }: { basePath: string; active: StrategyTabKey }) {
+export function StrategyTabs({
+  basePath,
+  active,
+  extraTabs = [],
+}: {
+  basePath: string;
+  active: string;
+  /** 전략 탭 뒤에 덧붙일 탭 (대시보드의 "종합 추천" 등). 화면별로 다르게 준다. */
+  extraTabs?: readonly { key: string; label: string }[];
+}) {
   return (
     <div className="mb-6 flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-      {STRATEGY_TABS.map((tab) => (
+      {[...STRATEGY_TABS, ...extraTabs].map((tab) => (
         <Link
           key={tab.key}
           href={`${basePath}/${tab.key}`}
