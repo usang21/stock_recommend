@@ -1,5 +1,5 @@
 import { getIndexCandles, getStockCandles, getStocksByThemeKeyword, toStockQuote } from "@/lib/dataSources/naver";
-import { buildExcludedUniverse, filterUniverse } from "./universe";
+import { buildExcludedUniverse, filterUniverse, meetsMinMarketCap } from "./universe";
 import { hasGoldenCross, isCloseAboveMA, hasBigBullishCandle, isDeviationWithin } from "./indicators";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import type { Strategy2Params } from "./defaultParams";
@@ -33,6 +33,7 @@ export async function runStrategy2(params: Strategy2Params): Promise<StrategyRun
     const byCode = new Map<string, ReturnType<typeof toStockQuote>>();
     for (const rows of themeRowLists) {
       for (const row of filterUniverse(rows, universe)) {
+        if (!meetsMinMarketCap(row, params.minMarketCap)) continue;
         byCode.set(row.itemcode, toStockQuote(row));
       }
     }
@@ -59,7 +60,9 @@ export async function runStrategy2(params: Strategy2Params): Promise<StrategyRun
     {
       stepIndex: 1,
       stepName: marketBullish
-        ? `강세장 확인 통과 + 테마(${params.themeKeywords.join("/")}) 종목`
+        ? `강세장 확인 통과 + 테마(${params.themeKeywords.join("/")}) 종목 + 시가총액 ${(
+            params.minMarketCap / 100_000_000
+          ).toLocaleString()}억원 이상`
         : "강세장 확인 실패 (지수 골든크로스 또는 60일선 상회 조건 미충족)",
       isFinal: false,
       picks: step1Picks,

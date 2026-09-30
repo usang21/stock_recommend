@@ -1,5 +1,5 @@
 import { getStockCandles, getVolumeTopRanking, toStockQuote } from "@/lib/dataSources/naver";
-import { buildExcludedUniverse, filterUniverse } from "./universe";
+import { buildExcludedUniverse, filterUniverse, meetsMinMarketCap } from "./universe";
 import { avgRecentTradingValue, avgRecentVolume, hasWeeklyMABreakout, isUpTrend } from "./indicators";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import type { Strategy4Params } from "./defaultParams";
@@ -18,7 +18,9 @@ const CANDLE_LOOKBACK_DAYS = 90; // 주봉 5주선 계산에 필요한 최소 �
 export async function runStrategy4(params: Strategy4Params): Promise<StrategyRunResult> {
   const universe = await buildExcludedUniverse();
   const rankingRows = await getVolumeTopRanking(100);
-  const candidateRows = filterUniverse(rankingRows, universe);
+  const candidateRows = filterUniverse(rankingRows, universe).filter((r) =>
+    meetsMinMarketCap(r, params.minMarketCap)
+  );
 
   const candlesByCode = new Map<string, Awaited<ReturnType<typeof getStockCandles>>>();
   const step1Checked = await mapWithConcurrency(candidateRows, FETCH_CONCURRENCY, async (row) => {
@@ -43,7 +45,9 @@ export async function runStrategy4(params: Strategy4Params): Promise<StrategyRun
   const steps: FunnelStepResult[] = [
     {
       stepIndex: 1,
-      stepName: `거래량 상위 종목 중 주봉 ${params.weeklyMaPeriod}주선 상향 돌파`,
+      stepName: `거래량 상위 종목 중 주봉 ${params.weeklyMaPeriod}주선 상향 돌파 + 시가총액 ${(
+        params.minMarketCap / 100_000_000
+      ).toLocaleString()}억원 이상`,
       isFinal: false,
       picks: step1Picks,
     },

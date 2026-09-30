@@ -4,7 +4,7 @@ export const STRATEGY_DESCRIPTIONS: Record<StrategyTabKey, { title: string; step
   strategy1: {
     title: "상한가 + 재료 + 거래량",
     steps: [
-      "전일 상한가 종목 추출",
+      "전일 상한가 종목 중 시가총액 1000억원 이상만 추출",
       "뉴스/공시 재료 유무 판단 (AI Agent 자동 판단)",
       "거래량 또는 거래대금이 일정 수준 이상인 종목만 최종 선정",
     ],
@@ -13,7 +13,7 @@ export const STRATEGY_DESCRIPTIONS: Record<StrategyTabKey, { title: string; step
     title: "강세장 + 테마 + 장대양봉 + 이격도",
     steps: [
       "지수 골든크로스 + 60일 이동평균선 위 (강세장 확인)",
-      "반도체 · 조선 · 방산 · 원전 · 로봇 · 2차전지 · 전력 테마 종목",
+      "반도체 · 조선 · 방산 · 원전 · 로봇 · 2차전지 · 전력 테마 종목 중 시가총액 1000억원 이상",
       "최근 며칠 이내 장대양봉 발생",
       "5일 이동평균선과의 이격도가 좁은 종목만 최종 선정",
     ],
@@ -21,7 +21,7 @@ export const STRATEGY_DESCRIPTIONS: Record<StrategyTabKey, { title: string; step
   strategy3: {
     title: "거래량 급증 + 신고가 + 기관수급 + 상승추세",
     steps: [
-      "최근 며칠 이내 평소 대비 거래량 급증",
+      "최근 며칠 이내 평소 대비 거래량 급증 종목 중 시가총액 1000억원 이상",
       "20일 · 60일 · 52주 신고가 또는 역사적 신고가",
       "최근 기관 연속 순매수 현황 확인 (기준 미달 종목도 데이터 표시)",
       "기관수급 기준 충족 + 상승추세(이동평균선 위)인 종목만 최종 선정",
@@ -30,7 +30,7 @@ export const STRATEGY_DESCRIPTIONS: Record<StrategyTabKey, { title: string; step
   strategy4: {
     title: "주봉 5이평선 돌파 + 거래량 + 20일선 상회",
     steps: [
-      "거래량 상위 종목 중 주봉 5주 이동평균선을 이번 주 상향 돌파",
+      "거래량 상위 종목 중 시가총액 1000억원 이상 & 주봉 5주 이동평균선을 이번 주 상향 돌파",
       "최근 3거래일 평균 거래량 또는 거래대금이 일정 수준 이상",
       "현재가가 20일 이동평균선 위인 종목만 최종 선정",
     ],

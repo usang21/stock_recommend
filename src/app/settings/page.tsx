@@ -26,6 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   institutionalMinBuyDays: "기관수급 최소 순매수 일수",
   weeklyMaPeriod: "주봉 이동평균 기간(주)",
   volumeAvgDays: "거래량/거래대금 평균 계산 기간(일)",
+  minMarketCap: "최소 시가총액 (원)",
 };
 
 function StrategySettingForm({ setting, onSaved }: { setting: StrategySetting; onSaved: () => void }) {

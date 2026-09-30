@@ -45,3 +45,8 @@ export function isExcluded(row: NaverStockRow, universe: Universe): boolean {
 export function filterUniverse(rows: NaverStockRow[], universe: Universe): NaverStockRow[] {
   return rows.filter((r) => !isExcluded(r, universe));
 }
+
+/** 종목 시가총액이 전략별 최소 기준(원) 이상인지 확인한다. */
+export function meetsMinMarketCap(row: NaverStockRow, minMarketCap: number): boolean {
+  return Number(row.marketSum) >= minMarketCap;
+}

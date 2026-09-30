@@ -1,5 +1,5 @@
 import { getUpperLimitStocks, toStockQuote } from "@/lib/dataSources/naver";
-import { buildExcludedUniverse, filterUniverse } from "./universe";
+import { buildExcludedUniverse, filterUniverse, meetsMinMarketCap } from "./universe";
 import { judgeMaterial } from "./materialJudge";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import type { Strategy1Params } from "./defaultParams";
@@ -27,7 +27,9 @@ const MATERIAL_JUDGE_TIME_BUDGET_MS = 220_000;
 export async function runStrategy1(params: Strategy1Params): Promise<StrategyRunResult> {
   const universe = await buildExcludedUniverse();
   const rawUpperLimit = await getUpperLimitStocks();
-  const step1Rows = filterUniverse(rawUpperLimit, universe);
+  const step1Rows = filterUniverse(rawUpperLimit, universe).filter((r) =>
+    meetsMinMarketCap(r, params.minMarketCap)
+  );
   const step1Picks: PickWithMaterial[] = step1Rows.map(toStockQuote);
 
   const judgeDeadline = Date.now() + MATERIAL_JUDGE_TIME_BUDGET_MS;
@@ -60,7 +62,12 @@ export async function runStrategy1(params: Strategy1Params): Promise<StrategyRun
   );
 
   const steps: FunnelStepResult[] = [
-    { stepIndex: 1, stepName: "전일 상한가", isFinal: false, picks: step1Picks },
+    {
+      stepIndex: 1,
+      stepName: `전일 상한가 + 시가총액 ${(params.minMarketCap / 100_000_000).toLocaleString()}억원 이상`,
+      isFinal: false,
+      picks: step1Picks,
+    },
     { stepIndex: 2, stepName: "재료(뉴스/공시) 판단 — 호재/악재/중립", isFinal: false, picks: step2Picks },
     {
       stepIndex: 3,

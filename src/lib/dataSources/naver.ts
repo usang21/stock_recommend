@@ -44,6 +44,7 @@ export interface NaverStockRow {
   week52HighPrice: string;
   week52LowPrice: string;
   listedDate: string;
+  marketSum: string; // 시가총액 (원). orderType과 무관하게 모든 랭킹 응답에 포함된다(2026-09-30 실 확인).
 }
 
 export type RankingOrderType =

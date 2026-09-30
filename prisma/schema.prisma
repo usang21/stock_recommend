@@ -90,3 +90,85 @@ model StrategyParams {
   paramsJson  Json
   updatedAt   DateTime @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 최종 추천 Agent (DESIGN.md §13)
+//
+// 아래 테이블들은 기존 리포트 파이프라인과 독립적이다. 리포트 생성과 다른
+// 스케줄로 실행되고, 기존 테이블을 참조하지 않으며(종목코드로만 느슨하게 연결),
+// 1개월 보관 정책(§9)의 삭제 대상에도 포함되지 않는다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 최종 추천 1회 실행
+model FinalRecommendationRun {
+  id           String   @id @default(cuid())
+  runDate      DateTime @db.Date
+  status       String   @default("running") // running | success | failed | skipped
+  errorMessage String?
+  // 이 추천이 어느 버전의 판단 기준/학습 기록을 보고 만들어졌는지 (§13 변경 이력 추적)
+  criteriaVersion Int?
+  lessonVersion   Int?
+  createdAt    DateTime @default(now())
+
+  picks RecommendationPick[]
+
+  @@unique([runDate])
+  @@index([runDate])
+}
+
+// 추천/제외된 종목 1건 = 추천 기록(memory). 피드백 루프의 입력이 되므로 삭제하지 않는다.
+model RecommendationPick {
+  id    String                 @id @default(cuid())
+  runId String
+  run   FinalRecommendationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  rank          Int? // 추천 종목만 1~5, 제외 종목은 null
+  isRecommended Boolean
+  stockCode     String
+  stockName     String
+  reason        String // 추천 근거 또는 제외 사유
+  basePrice     Int // 추천일 종가 — 상승/하락 판정의 기준가
+  strategyKeys  Json // 이 종목을 낸 전략 키 목록 ["strategy1", ...]
+  recommendedAt DateTime @default(now())
+
+  outcome RecommendationOutcome?
+
+  @@index([runId])
+  @@index([stockCode])
+}
+
+// 피드백 루프의 결과 판정 (추천일 종가 대비 +3%↑ 상승 / -3%↓ 하락 / 그 사이 보합).
+// 추천 후 1~5거래일 동안 매 실행마다 갱신되고, 사유 분석은 상승/하락이 확정된
+// 시점에 한 번만 기록한다(같은 종목을 매일 다시 분석해 학습 기록을 오염시키지
+// 않기 위함).
+model RecommendationOutcome {
+  id     String             @id @default(cuid())
+  pickId String             @unique
+  pick   RecommendationPick @relation(fields: [pickId], references: [id], onDelete: Cascade)
+
+  evaluatedAt  DateTime @default(now())
+  tradingDays  Int // 추천 후 경과 거래일 수
+  currentPrice Int
+  changeRate   Float
+  verdict      String // "up" | "down" | "flat"
+  analysis     String? // 상승/하락 사유 분석 (보합이면 null)
+  analyzedAt   DateTime?
+
+  @@index([verdict])
+}
+
+// 추천 로직(판단 기준 + 학습 기록)의 버전 이력 (§13 추천 로직 변경 이력).
+// 변경할 때마다 새 행을 추가하고 이전 행은 지우지 않는다 — 로직이 왜 지금
+// 모습이 됐는지를 설명하는 유일한 기록이기 때문이다.
+model RecommendationLogicVersion {
+  id           String   @id @default(cuid())
+  kind         String // "criteria"(사람이 정한 판단 기준) | "lesson"(피드백 루프가 쌓은 학습 기록)
+  version      Int // kind별로 1부터 증가
+  content      String // 해당 시점의 md 본문 전체 스냅샷
+  changedBy    String // "agent" | "human"
+  changeReason String
+  createdAt    DateTime @default(now())
+
+  @@unique([kind, version])
+  @@index([kind, createdAt])
+}
