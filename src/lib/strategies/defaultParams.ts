@@ -5,6 +5,8 @@ export interface Strategy1Params {
   minVolume: number;
   /** 전략1 3단계: 거래대금 절대치 필터 (원). minVolume과 OR 조건. */
   minTradingValue: number;
+  /** 최소 시가총액 (원). 미만인 종목은 1단계부터 제외한다. */
+  minMarketCap: number;
 }
 
 export interface Strategy2Params {
@@ -20,6 +22,8 @@ export interface Strategy2Params {
   maPeriod: number;
   /** 시가총액 중심주 테마 키워드 목록 */
   themeKeywords: string[];
+  /** 최소 시가총액 (원). 미만인 종목은 1단계부터 제외한다. */
+  minMarketCap: number;
 }
 
 export interface Strategy3Params {
@@ -34,6 +38,8 @@ export interface Strategy3Params {
   /** 기관수급 판정: N일 중 순매수 최소 일수 */
   institutionalMinBuyDays: number;
   maPeriod: number;
+  /** 최소 시가총액 (원). 미만인 종목은 1단계부터 제외한다. */
+  minMarketCap: number;
 }
 
 export interface Strategy4Params {
@@ -47,11 +53,19 @@ export interface Strategy4Params {
   minTradingValue: number;
   /** 현재가와 비교할 이동평균 기간(일) */
   maPeriod: number;
+  /** 최소 시가총액 (원). 미만인 종목은 1단계부터 제외한다. */
+  minMarketCap: number;
 }
+
+// 4개 전략 공통 최소 시가총액 기준 (1000억원). 초소형주의 관리종목 전환·상장폐지
+// 리스크를 배제하기 위한 하한선으로, 사용자 확인을 거쳐 채택했다(설정 페이지에서
+// 전략별로 개별 조정 가능).
+const MIN_MARKET_CAP = 100_000_000_000;
 
 export const DEFAULT_STRATEGY1_PARAMS: Strategy1Params = {
   minVolume: 10_000_000,
   minTradingValue: 200_000_000_000,
+  minMarketCap: MIN_MARKET_CAP,
 };
 
 export const DEFAULT_STRATEGY2_PARAMS: Strategy2Params = {
@@ -62,6 +76,7 @@ export const DEFAULT_STRATEGY2_PARAMS: Strategy2Params = {
   maDeviationMaxPct: 3,
   maPeriod: 5,
   themeKeywords: ["반도체", "조선", "방산", "원전", "로봇", "2차전지", "전력"],
+  minMarketCap: MIN_MARKET_CAP,
 };
 
 export const DEFAULT_STRATEGY3_PARAMS: Strategy3Params = {
@@ -71,6 +86,7 @@ export const DEFAULT_STRATEGY3_PARAMS: Strategy3Params = {
   institutionalWindowDays: 10,
   institutionalMinBuyDays: 8,
   maPeriod: 5,
+  minMarketCap: MIN_MARKET_CAP,
 };
 
 export const DEFAULT_STRATEGY4_PARAMS: Strategy4Params = {
@@ -79,6 +95,7 @@ export const DEFAULT_STRATEGY4_PARAMS: Strategy4Params = {
   minVolume: 10_000_000,
   minTradingValue: 200_000_000_000,
   maPeriod: 20,
+  minMarketCap: MIN_MARKET_CAP,
 };
 
 export const STRATEGY_DEFS = {
