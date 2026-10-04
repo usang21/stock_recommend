@@ -36,6 +36,10 @@ export interface NaverStockRow {
   manageStatusGb: string; // "0" 정상, "1" 관리종목
   tradeStopYn: "Y" | "N";
   marketAlertType: string; // "00" 없음, "01"/"02"/"03" 투자유의/경고/위험
+  // 장 상태. "CLOSE"면 장이 닫혀 있고, 장중에는 다른 값이 온다(2026-10-04 확인).
+  // 장 마감 후에는 휴장일과 정상 거래일이 모두 "CLOSE"라 장중에만 판정에 쓸 수 있다
+  // (marketDay.ts 참고). 기존 코드가 객체 리터럴을 만들더라도 깨지지 않도록 optional.
+  marketStatus?: string;
   nowPrice: string;
   openPrice: string;
   highPrice: string;
