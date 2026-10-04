@@ -29,6 +29,9 @@ async function getJson<T>(url: string): Promise<T> {
 export interface NaverStockRow {
   itemname: string;
   itemcode: string;
+  // "0" = KOSPI, "1" = KOSDAQ (2026-10-04 실 응답 12종목으로 확인). 문자/숫자 모두 올 수 있다.
+  // 기존 코드가 이 타입의 객체 리터럴을 만들더라도 깨지지 않도록 optional로 둔다.
+  sosok?: string | number;
   type: string | null; // "ST" = 일반주. ETF/ETN은 별도 API라 보통 섞이지 않지만 방어적으로 확인한다.
   manageStatusGb: string; // "0" 정상, "1" 관리종목
   tradeStopYn: "Y" | "N";
