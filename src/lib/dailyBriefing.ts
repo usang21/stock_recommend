@@ -1,13 +1,19 @@
 /**
  * 당일 상한가 / 거래량 급증 브리핑 (DESIGN.md §14).
  *
- * 스크리너(전략 1~4)와 달리 판단이나 필터링을 하지 않는다. 당일 상한가 종목과
- * 거래량 1,000만 주 이상 종목을 그대로 모아, 사람이 뉴스·공시를 직접 확인할 수
- * 있도록 링크만 붙여 전달하는 것이 목적이다. 따라서 `universe.ts`의 전체 제외
- * 기준(관리종목·거래정지·SPAC·투자경고)은 적용하지 않는다 — 그런 종목이야말로
- * 상한가 목록에 뜨면 사람이 알아야 하는 대상이기 때문이다. ETF·ETN만 제외한다.
+ * 스크리너(전략 1~4)와 달리 재료 판단이나 추세·수급 조건은 쓰지 않는다. 당일 상한가
+ * 종목과 거래량 1,000만 주 이상 종목을 모아, 사람이 뉴스·공시를 직접 확인할 수
+ * 있도록 링크를 붙여 전달하는 것이 목적이다.
+ *
+ * 다만 `universe.ts`의 제외 기준(관리종목·거래정지·SPAC·투자유의/경고/위험·ETF/ETN)은
+ * 스크리너와 똑같이 적용한다. 애초에 매수 후보로 볼 수 없는 종목이 목록에 섞이면
+ * 확인할 가치가 없는 줄이 늘어날 뿐이기 때문이다.
+ *
+ * 최소 시가총액 기준은 적용하지 않는다. 시총이 작아도 상한가에 들었다는 사실 자체는
+ * 알 가치가 있다고 보고, 거르지 않고 보여준다 (`meetsMinMarketCap`은 호출하지 않는다).
  */
 import { getUpperLimitStocks, getVolumeTopRanking, type NaverStockRow } from "@/lib/dataSources/naver";
+import { buildExcludedUniverse, filterUniverse } from "@/lib/strategies/universe";
 
 /** 거래량 기준치 (주). 이 수치 이상인 종목만 거래량 조건으로 포함한다. */
 export const VOLUME_THRESHOLD = 10_000_000;
@@ -69,16 +75,6 @@ function marketOf(row: NaverStockRow): string {
   return UNKNOWN_MARKET;
 }
 
-/**
- * ETF·ETN 제외. 랭킹 API(orderType=upperLimit/quantTop)는 2026-10-04 실측에서
- * 100% `type: "ST"`(일반주)만 반환했지만, 혹시 섞여 들어오면 거래량 상위가
- * 레버리지 ETF로 뒤덮이므로 방어적으로 한 번 더 막는다. `type`이 비어 오는
- * 경우는 통과시킨다 (universe.ts의 isExcluded와 같은 판정).
- */
-function isTradableStock(row: NaverStockRow): boolean {
-  return !row.type || row.type === "ST";
-}
-
 function newsUrl(name: string, code: string): string {
   return `https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(`${name} ${code}`)}`;
 }
@@ -111,7 +107,8 @@ function toBriefingStock(row: NaverStockRow): BriefingStock {
  * 행이 둘로 갈리지 않고 태그 두 개를 함께 갖는다.
  */
 export async function buildDailyBriefing(now: Date = new Date()): Promise<DailyBriefing> {
-  const [upperLimitRows, volumeRows] = await Promise.all([
+  const [universe, upperLimitRows, volumeRows] = await Promise.all([
+    buildExcludedUniverse(),
     getUpperLimitStocks(),
     getVolumeTopRanking(VOLUME_RANKING_SIZE),
   ]);
@@ -124,12 +121,12 @@ export async function buildDailyBriefing(now: Date = new Date()): Promise<DailyB
     byCode.set(row.itemcode, stock);
   };
 
-  const limitUp = upperLimitRows.filter(isTradableStock);
+  const limitUp = filterUniverse(upperLimitRows, universe);
   for (const row of limitUp) addTag(row, LIMIT_UP_TAG);
 
-  const highVolume = volumeRows
-    .filter(isTradableStock)
-    .filter((row) => Number(row.tradeVolume) >= VOLUME_THRESHOLD);
+  const highVolume = filterUniverse(volumeRows, universe).filter(
+    (row) => Number(row.tradeVolume) >= VOLUME_THRESHOLD
+  );
   for (const row of highVolume) addTag(row, HIGH_VOLUME_TAG);
 
   // 상한가를 먼저, 그 안에서는 거래량이 많은 순서로 — 메일과 Notion에서 같은 순서를 쓴다.
