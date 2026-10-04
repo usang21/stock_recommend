@@ -141,6 +141,19 @@ ollama pull llama3.1:8b        # 최초 1회 모델 다운로드 (약 4.9GB)
 판단하고 응답에 `marketDayCheck: "no-record"`를 남긴다 — 정상 거래일을 잃는 것이
 휴장일에 잘못 실행하는 것보다 나쁘기 때문이다.
 
+**화면의 재생성 버튼에는 이 가드를 두지 않는다.** 사람이 누른 것은 의도로 본다.
+13시 판정이 잘못돼 그날 자동 실행이 모두 건너뛰어졌을 때 이 버튼들이 복구 수단이
+된다. 버튼은 세 곳에 있다.
+
+| 화면 | 버튼 | 호출 |
+| --- | --- | --- |
+| 전략 1~4 리포트 | 리포트 재생성 | `POST /api/reports/regenerate` |
+| 종합 추천 | 종합 추천 다시 실행 | `POST /api/final-recommendation/regenerate` |
+| 오늘의 브리핑 | Notion에 다시 기록 | `POST /api/briefing/regenerate` |
+
+브리핑 버튼의 이름이 "재생성"이 아닌 이유는, 화면이 열 때마다 네이버를 조회해 늘
+최신이기 때문이다. 이 버튼이 고치는 대상은 Notion 기록이다.
+
 이 기능은 **DB 마이그레이션이 필요하다.** 배포 전에 `npx prisma migrate deploy`를 실행한다.
 
 ## 당일 상한가 / 거래량 브리핑 (DESIGN.md §14)
