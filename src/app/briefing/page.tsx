@@ -19,6 +19,18 @@ function fmtNum(n: number): string {
   return n.toLocaleString();
 }
 
+/** 거래대금은 조/억 단위로 줄여 쓴다. 원 단위 그대로는 자릿수가 많아 읽기 어렵다. */
+function fmtMoney(n: number): string {
+  if (n >= 1_000_000_000_000) return `${(n / 1_000_000_000_000).toFixed(1)}조`;
+  return `${Math.round(n / 100_000_000).toLocaleString()}억`;
+}
+
+/** 평소 대비 배수. 판정하지 못한 경우(일봉 부족)는 표시하지 않는다. */
+function fmtRatio(n: number | null): string | null {
+  if (n === null || !Number.isFinite(n)) return null;
+  return `평소 ${n.toFixed(1)}배`;
+}
+
 function fmtRate(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
@@ -74,6 +86,7 @@ function StockSection({
                 <th className="px-3 py-2 font-medium">종가</th>
                 <th className="px-3 py-2 font-medium">등락률</th>
                 {showVolume && <th className="px-3 py-2 font-medium">거래량</th>}
+                {showVolume && <th className="px-3 py-2 font-medium">거래대금</th>}
                 <th className="px-3 py-2 font-medium">확인 링크</th>
               </tr>
             </thead>
@@ -90,7 +103,24 @@ function StockSection({
                   <td className={`px-3 py-2 font-semibold tabular-nums ${rateColor(stock.changeRate)}`}>
                     {fmtRate(stock.changeRate)}
                   </td>
-                  {showVolume && <td className="px-3 py-2 tabular-nums">{fmtNum(stock.volume)}주</td>}
+                  {showVolume && (
+                    <td className="px-3 py-2 tabular-nums">
+                      {fmtNum(stock.volume)}주
+                      {fmtRatio(stock.volumeRatio) && (
+                        <div className="text-xs text-neutral-500">{fmtRatio(stock.volumeRatio)}</div>
+                      )}
+                    </td>
+                  )}
+                  {showVolume && (
+                    <td className="px-3 py-2 tabular-nums">
+                      {fmtMoney(stock.tradingValue)}
+                      {fmtRatio(stock.tradingValueRatio) && (
+                        <div className="text-xs text-neutral-500">
+                          {fmtRatio(stock.tradingValueRatio)}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <LinkCell stock={stock} />
                   </td>
@@ -124,7 +154,13 @@ function Briefing({ briefing }: { briefing: DailyBriefing }) {
   // 양쪽에 나타난다 — 어느 조건으로 걸렸는지가 섹션 자체로 드러나야 하기 때문이다.
   const limitUp = briefing.stocks.filter((s) => s.tags.includes(LIMIT_UP_TAG));
   const highVolume = briefing.stocks.filter((s) => s.tags.includes(HIGH_VOLUME_TAG));
-  const thresholdLabel = fmtNum(briefing.volumeThreshold);
+  // 두 조건이 OR이므로 제목에 둘 다 적는다. 어느 쪽으로 들어왔는지는 표의
+  // 거래량·거래대금 열을 보면 드러난다.
+  const volumeLabel = `${fmtNum(briefing.volumeThreshold)}주`;
+  const moneyLabel = fmtMoney(briefing.tradingValueThreshold);
+  // 절대치와 급증배수를 함께 만족해야 하므로 제목에 둘 다 적는다.
+  const surge = `직전 ${briefing.baselineTradingDays}거래일 평균의 ${briefing.surgeMultiplier}배 이상`;
+  const conditionLabel = `거래량 ${volumeLabel} 또는 거래대금 ${moneyLabel} 이상 + ${surge}`;
 
   return (
     <>
@@ -138,9 +174,9 @@ function Briefing({ briefing }: { briefing: DailyBriefing }) {
         showVolume
       />
       <StockSection
-        title={`거래량 ${thresholdLabel}주 이상 종목`}
+        title={`대량거래 종목 — ${conditionLabel}`}
         stocks={highVolume}
-        emptyText={`오늘 KOSPI·KOSDAQ 거래량 ${thresholdLabel}주 이상 종목이 없습니다.`}
+        emptyText={`오늘 KOSPI·KOSDAQ ${conditionLabel} 종목이 없습니다.`}
         showVolume
       />
     </>
