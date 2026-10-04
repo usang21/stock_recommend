@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildDailyBriefing } from "@/lib/dailyBriefing";
-import { sendDailyBriefingEmail } from "@/lib/briefingEmail";
+import { notifyBriefingToKakao } from "@/lib/briefingKakao";
 import { pushBriefingToNotion } from "@/lib/notion";
 
 // 네이버 랭킹 2회 + Notion 기록(종목당 1회, 초당 3요청 제한에 맞춰 간격 유지)이라
@@ -10,7 +10,7 @@ export const maxDuration = 120;
 /**
  * Vercel Cron이 평일 장 마감 후 호출한다 (DESIGN.md §14). vercel.json 참고.
  *
- * 메일과 Notion은 서로 독립적으로 처리한다 — 한쪽이 실패해도 다른 쪽은 전달되어야
+ * 카카오톡과 Notion은 서로 독립적으로 처리한다 — 한쪽이 실패해도 다른 쪽은 전달되어야
  * 하고, 둘 다 실패해도 어느 쪽이 왜 실패했는지 응답에 남아야 하기 때문이다.
  */
 export async function GET(request: NextRequest) {
@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
 
   const briefing = await buildDailyBriefing();
 
-  const [emailResult, notionResult] = await Promise.allSettled([
-    sendDailyBriefingEmail(briefing),
+  const [kakaoResult, notionResult] = await Promise.allSettled([
+    notifyBriefingToKakao(briefing),
     pushBriefingToNotion(briefing),
   ]);
 
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     stockCount: briefing.stocks.length,
     // 배포 후 수동 호출로 결과를 눈으로 확인할 수 있도록 종목 요약을 함께 돌려준다.
     stocks: briefing.stocks.map((s) => `${s.name}(${s.code}) ${s.tags.join("/")}`),
-    email: report(emailResult, "브리핑 메일 발송"),
+    kakao: report(kakaoResult, "브리핑 카카오톡 알림"),
     notion: report(notionResult, "브리핑 Notion 기록"),
   });
 }
