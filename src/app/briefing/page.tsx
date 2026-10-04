@@ -159,7 +159,7 @@ function Briefing({ briefing }: { briefing: DailyBriefing }) {
   const volumeLabel = `${fmtNum(briefing.volumeThreshold)}주`;
   const moneyLabel = fmtMoney(briefing.tradingValueThreshold);
   // 절대치와 급증배수를 함께 만족해야 하므로 제목에 둘 다 적는다.
-  const surge = `직전 ${briefing.baselineTradingDays}거래일 평균의 ${briefing.surgeMultiplier}배 이상`;
+  const surge = `이전 주 평균의 ${briefing.surgeMultiplier}배 이상`;
   const conditionLabel = `거래량 ${volumeLabel} 또는 거래대금 ${moneyLabel} 이상 + ${surge}`;
 
   return (
