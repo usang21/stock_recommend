@@ -42,8 +42,15 @@ export const TRADING_VALUE_THRESHOLD = 200_000_000_000;
  */
 export const SURGE_MULTIPLIER = 2;
 
-/** 평소 거래 수준을 재는 기간 (직전 거래일 수, 오늘 제외). */
-export const BASELINE_TRADING_DAYS = 5;
+/**
+ * 평소 거래 수준은 **이전 주(월~금)** 평균으로 잰다.
+ *
+ * 직전 N거래일처럼 굴러가는 창을 쓰면, 급증이 며칠 이어질 때 급증한 날들이 평균에
+ * 들어가 배수가 급격히 떨어진다. 한온시스템 2026-10-02이 그 예다 — 9/30(23.4M)과
+ * 10/01(21.0M)이 이미 급증한 날인데 직전 5거래일 창에는 그 둘이 포함돼 1.76배로
+ * 나왔다. 이전 주(9/21~9/23, 평균 308만 주)와 비교하면 6.15배다.
+ */
+const BASELINE_FETCH_CANDLES = 25;
 
 /** 종목별 일봉 조회를 동시에 너무 많이 날리지 않도록 제한한다. */
 const BASELINE_CONCURRENCY = 4;
@@ -91,7 +98,6 @@ export interface DailyBriefing {
   volumeThreshold: number;
   tradingValueThreshold: number;
   surgeMultiplier: number;
-  baselineTradingDays: number;
 }
 
 /**
@@ -146,32 +152,60 @@ function toBriefingStock(row: NaverStockRow): BriefingStock {
 }
 
 interface Baseline {
-  /** 직전 N거래일 평균 거래량 (주). */
+  /** 이전 주 평균 거래량 (주). */
   volume: number;
-  /** 직전 N거래일 평균 거래대금 (원, 추정치 — 아래 주석 참고). */
+  /** 이전 주 평균 거래대금 (원, 추정치 — 아래 주석 참고). */
   tradingValue: number;
+  /** 평균에 쓰인 거래일 (YYYYMMDD). 공휴일이 끼면 5일보다 적다. */
+  days: string[];
+}
+
+function compact(date: Date): string {
+  return date.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
 /**
- * 직전 거래일들의 평균 거래 수준. 오늘은 평균에서 제외한다.
+ * 기준이 되는 세션 날짜가 속한 주의 **직전 주** 월요일~일요일 구간.
  *
- * 거래대금은 **추정치**다. 네이버의 일봉 API가 주는 컬럼이 날짜·시가·고가·저가·종가·
- * 거래량·외국인소진율이어서 일별 거래대금이 없고(2026-10-04 확인), 다른 공개
- * 엔드포인트에서도 일별 시계열을 찾지 못했다. 그래서 `종가 × 거래량`으로 추정한다.
- * 실제 거래대금과의 오차는 당일 수치로 대조했을 때 대부분 ±3% 안쪽이었다(동전주는
- * 가격 단위 때문에 10%를 넘기도 하지만, 그런 종목은 관리종목으로 이미 제외된다).
- *
- * 배수를 구할 때 오늘 값도 같은 방식으로 추정해 비교하므로, 추정 오차가 분자와
- * 분모에서 함께 상쇄된다.
+ * 공휴일로 거래일이 줄어드는 것은 그대로 받아들인다. 추석이 낀 2026-09-21 주는
+ * 9/21~9/23 사흘만 거래됐는데, 그 사흘 평균이 그 주의 평소 수준이다.
  */
-function baselineFrom(candles: Candle[], tradeDate: string): Baseline | null {
-  const todayCompact = tradeDate.replace(/-/g, "");
-  // 오늘 일봉이 이미 올라와 있을 수도, 아직 없을 수도 있어 날짜로 걸러낸다.
-  const past = candles.filter((c) => c.date < todayCompact).slice(-BASELINE_TRADING_DAYS);
-  if (past.length < BASELINE_TRADING_DAYS) return null;
-  const volume = past.reduce((sum, c) => sum + c.volume, 0) / past.length;
-  const tradingValue = past.reduce((sum, c) => sum + c.close * c.volume, 0) / past.length;
-  return { volume, tradingValue };
+function previousWeekRange(sessionDate: string): { start: string; end: string } {
+  const d = new Date(
+    `${sessionDate.slice(0, 4)}-${sessionDate.slice(4, 6)}-${sessionDate.slice(6, 8)}T00:00:00.000Z`
+  );
+  const daysSinceMonday = (d.getUTCDay() + 6) % 7; // 일요일(0)을 주의 끝으로 본다
+  const previousMonday = new Date(d);
+  previousMonday.setUTCDate(d.getUTCDate() - daysSinceMonday - 7);
+  const previousSunday = new Date(previousMonday);
+  previousSunday.setUTCDate(previousMonday.getUTCDate() + 6);
+  return { start: compact(previousMonday), end: compact(previousSunday) };
+}
+
+/**
+ * 이전 주 평균 거래 수준.
+ *
+ * 비교 대상 세션은 일봉의 **마지막 행**이다. 랭킹 API가 보고하는 "당일" 수치가 그 행과
+ * 일치한다(2026-10-04 삼성전자로 대조 확인). 달력상 오늘로 자르면 휴장일에 실행할 때
+ * 비교 대상이 자기 평균에 섞여 들어가므로, 날짜 대신 일봉의 마지막 행을 기준으로 삼는다.
+ *
+ * 거래대금은 **추정치**다. 네이버 일봉 API가 주는 컬럼이 날짜·시가·고가·저가·종가·
+ * 거래량·외국인소진율이어서 일별 거래대금이 없고, 다른 공개 엔드포인트에서도 일별
+ * 시계열을 찾지 못했다(2026-10-04 확인). 그래서 `종가 × 거래량`으로 추정한다. 실제
+ * 거래대금과의 오차는 당일 수치로 대조했을 때 대부분 ±3% 안쪽이었다. 배수를 구할 때
+ * 오늘 값도 같은 방식으로 추정해 비교하므로 오차가 분자와 분모에서 상쇄된다.
+ */
+function baselineFrom(candles: Candle[]): Baseline | null {
+  const session = candles[candles.length - 1];
+  if (!session) return null;
+  const { start, end } = previousWeekRange(session.date);
+  const week = candles.filter((c) => c.date >= start && c.date <= end);
+  if (week.length === 0) return null;
+  return {
+    volume: week.reduce((sum, c) => sum + c.volume, 0) / week.length,
+    tradingValue: week.reduce((sum, c) => sum + c.close * c.volume, 0) / week.length,
+    days: week.map((c) => c.date),
+  };
 }
 
 interface SurgeVerdict {
@@ -184,7 +218,7 @@ interface SurgeVerdict {
  * 대량거래 판정. 거래량과 거래대금 각각 **절대치와 급증배수를 함께** 만족해야 하고,
  * 둘 중 하나만 통과해도 포함한다.
  *
- * 일봉이 부족해 평소 수준을 모르는 경우(신규 상장 등)는 통과시킨다. 판정할 수 없다는
+ * 이전 주에 거래일이 없어 평소 수준을 모르는 경우(신규 상장 등)는 통과시킨다. 판정할 수 없다는
  * 이유로 거래가 몰린 종목을 빠뜨리는 쪽이, 몇 줄 더 보는 것보다 나쁘다고 보았다.
  */
 function judgeSurge(row: NaverStockRow, baseline: Baseline | null): SurgeVerdict {
@@ -240,9 +274,9 @@ export async function buildDailyBriefing(now: Date = new Date()): Promise<DailyB
   const judged = await mapWithConcurrency(candidates, BASELINE_CONCURRENCY, async (row) => {
     let baseline: Baseline | null = null;
     try {
-      // 휴일을 감안해 넉넉히 받아 날짜로 걸러낸다.
-      const candles = await getStockCandles(row.itemcode, BASELINE_TRADING_DAYS + 10);
-      baseline = baselineFrom(candles, tradeDate);
+      // 이전 주까지 거슬러 가야 하므로 2주 넘게 받아 구간으로 걸러낸다.
+      const candles = await getStockCandles(row.itemcode, BASELINE_FETCH_CANDLES);
+      baseline = baselineFrom(candles);
     } catch (err) {
       // 한 종목의 일봉 조회 실패가 브리핑 전체를 깨뜨리지 않도록 한다. 평소 수준을
       // 모르는 것으로 보고 통과시킨다 (judgeSurge의 null 처리와 같은 방침).
@@ -277,6 +311,5 @@ export async function buildDailyBriefing(now: Date = new Date()): Promise<DailyB
     volumeThreshold: VOLUME_THRESHOLD,
     tradingValueThreshold: TRADING_VALUE_THRESHOLD,
     surgeMultiplier: SURGE_MULTIPLIER,
-    baselineTradingDays: BASELINE_TRADING_DAYS,
   };
 }
