@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateFinalRecommendation, type FinalRecommendationRunResult } from "@/lib/recommendation/run";
 import { notifyAllKakaoRecipients } from "@/lib/dataSources/kakao";
+import { shouldRunToday } from "@/lib/marketDay";
 
 // 리포트 생성과 별도의 실행이므로 시간 예산도 따로 쓴다 (DESIGN.md §13
 // "실행 시간 침범 금지"). Vercel Hobby 플랜 최댓값.
@@ -45,6 +46,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // 휴장일(국경일·임시공휴일 포함)에는 아무것도 실행하지 않는다 (DESIGN.md §15).
+  // 판정은 13시 cron이 장중에 남긴 기록을 읽는다 — 장 마감 후에는 휴장일과 정상
+  // 거래일을 구분할 수 없기 때문이다.
+  const verdict = await shouldRunToday();
+  if (!verdict.run) {
+    return NextResponse.json({
+      status: "skipped",
+      reason: "non-trading-day",
+      marketStatus: verdict.marketStatus,
+    });
+  }
+
   const result = await generateFinalRecommendation();
 
   // 알림 실패가 최종 추천 결과를 덮지 않도록 분리해 처리한다.
@@ -54,5 +67,5 @@ export async function GET(request: NextRequest) {
     console.error("카카오톡 알림 발송 실패:", err);
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json({ ...result, marketDayCheck: verdict.reason });
 }

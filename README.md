@@ -119,6 +119,30 @@ ollama pull llama3.1:8b        # 최초 1회 모델 다운로드 (약 4.9GB)
 - **수동**: 로그인 후 대시보드의 "리포트 재생성" 버튼, 또는
   `POST /api/reports/regenerate` 직접 호출.
 
+## 휴장일에는 모든 스케줄이 건너뛴다 (DESIGN.md §15)
+
+평일이어도 국경일·임시공휴일이면 시장이 열리지 않는다. 그런 날 스케줄이 돌면 전
+거래일 수치를 그날 날짜로 기록하게 되므로, 모든 cron이 실행 전에 개장 여부를 확인한다.
+
+판정 근거는 네이버 랭킹 응답의 `marketStatus`인데, 이 값은 **장중에만** 쓸 수 있다 —
+장 마감 후에는 휴장일과 정상 거래일이 모두 `CLOSE`로 보인다. 그래서 정규장 한가운데인
+**13:00에 확인 전용 cron**(`/api/cron/market-status`)을 두고 결과를 `MarketDayStatus`
+테이블에 남기고, 이후 cron들이 그 기록을 읽는다.
+
+| 시각(KST) | cron | 하는 일 |
+| --- | --- | --- |
+| 13:00 | `/api/cron/market-status` | 개장 여부 확인·기록 |
+| 15:45 | `/api/cron/daily-briefing` | 브리핑 Notion 기록 |
+| 16:00 | `/api/cron/generate-report` | 리포트 생성 |
+| 17:00 | `/api/cron/final-recommendation` | 최종 추천 + 카카오톡 알림 |
+
+휴장일이면 뒤의 세 작업이 `{"status":"skipped","reason":"non-trading-day"}`를 돌려주고
+끝낸다. 카카오톡도 가지 않는다. 13시 기록이 없으면(cron 누락) **실행하는 쪽으로**
+판단하고 응답에 `marketDayCheck: "no-record"`를 남긴다 — 정상 거래일을 잃는 것이
+휴장일에 잘못 실행하는 것보다 나쁘기 때문이다.
+
+이 기능은 **DB 마이그레이션이 필요하다.** 배포 전에 `npx prisma migrate deploy`를 실행한다.
+
 ## 당일 상한가 / 거래량 브리핑 (DESIGN.md §14)
 
 스크리너와 **별개 기능**이다. 당일 상한가 종목과 거래량 1,000만 주 이상 종목을

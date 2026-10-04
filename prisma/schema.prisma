@@ -172,3 +172,14 @@ model RecommendationLogicVersion {
   @@unique([kind, version])
   @@index([kind, createdAt])
 }
+
+// 그날 주식시장이 열렸는지 (DESIGN.md §15).
+// 장중(13시)에 한 번 확인해 기록하고, 이후 cron들이 이 값을 보고 실행 여부를 정한다.
+// 장 마감 후에는 휴장일과 "오늘 장이 끝남"을 구분할 수 없어, 장중에 확인한 결과를
+// 남겨두는 것이 유일한 방법이다.
+model MarketDayStatus {
+  tradeDate    DateTime @id @db.Date // KST 기준 날짜
+  isOpen       Boolean
+  marketStatus String // 네이버가 보고한 원래 값 (판정이 틀렸을 때 추적용)
+  checkedAt    DateTime @default(now())
+}
