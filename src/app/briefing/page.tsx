@@ -129,7 +129,7 @@ function Briefing({ briefing }: { briefing: DailyBriefing }) {
   return (
     <>
       <p className="mb-6 text-sm text-neutral-500">
-        {briefing.tradeDate} 기준 · 시세 목록: 네이버 금융 · ETF·ETN 제외 · 장중 수치는 지연되거나 변동될 수 있습니다.
+        {briefing.tradeDate} 기준 · 시세 목록: 네이버 금융 · 관리종목·거래정지·SPAC·투자경고·ETF/ETN 제외 · 시가총액 제한 없음 · 장중 수치는 지연되거나 변동될 수 있습니다.
       </p>
       <StockSection
         title="상한가 종목"
