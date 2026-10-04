@@ -110,8 +110,12 @@ ollama pull llama3.1:8b        # 최초 1회 모델 다운로드 (약 4.9GB)
 ## 리포트 생성 실행 방법
 
 - **자동**: `vercel.json`에 등록된 Vercel Cron이 평일 07:00 UTC(KST 16:00)에
-  `/api/cron/generate-report`를 호출한다. Vercel Cron 스케줄은 항상 UTC
+  `/api/cron/generate-report`를 호출하고, 08:00 UTC(KST 17:00)에
+  `/api/cron/final-recommendation`을 호출한다. Vercel Cron 스케줄은 항상 UTC
   기준이라 KST로 바꾸려면 9시간을 빼서 계산해야 한다.
+- **카카오톡 알림은 최종 추천 cron이 끝난 뒤 하루 한 번만** 간다. 리포트가 끝난
+  16시에 알리면 들어가도 최종 추천이 아직 비어 있어서, 하루 일과의 마지막으로
+  옮겼다. 최종 추천이 건너뛰어졌거나 실패한 경우도 그 사실을 담아 보낸다.
 - **수동**: 로그인 후 대시보드의 "리포트 재생성" 버튼, 또는
   `POST /api/reports/regenerate` 직접 호출.
 
