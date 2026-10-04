@@ -1,4 +1,5 @@
 import { AppNav } from "@/components/AppNav";
+import { BriefingRegenerateButton } from "@/components/BriefingRegenerateButton";
 import {
   buildDailyBriefing,
   HIGH_VOLUME_TAG,
@@ -163,7 +164,10 @@ export default async function BriefingPage() {
       <main className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-4 flex items-center justify-between gap-4">
           <h1 className="text-xl font-semibold">오늘의 브리핑</h1>
-          <NotionLink />
+          <div className="flex items-center gap-2">
+            <BriefingRegenerateButton />
+            <NotionLink />
+          </div>
         </div>
         {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">

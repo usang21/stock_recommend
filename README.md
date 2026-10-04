@@ -110,10 +110,51 @@ ollama pull llama3.1:8b        # 최초 1회 모델 다운로드 (약 4.9GB)
 ## 리포트 생성 실행 방법
 
 - **자동**: `vercel.json`에 등록된 Vercel Cron이 평일 07:00 UTC(KST 16:00)에
-  `/api/cron/generate-report`를 호출한다. Vercel Cron 스케줄은 항상 UTC
+  `/api/cron/generate-report`를 호출하고, 08:00 UTC(KST 17:00)에
+  `/api/cron/final-recommendation`을 호출한다. Vercel Cron 스케줄은 항상 UTC
   기준이라 KST로 바꾸려면 9시간을 빼서 계산해야 한다.
+- **카카오톡 알림은 최종 추천 cron이 끝난 뒤 하루 한 번만** 간다. 리포트가 끝난
+  16시에 알리면 들어가도 최종 추천이 아직 비어 있어서, 하루 일과의 마지막으로
+  옮겼다. 최종 추천이 건너뛰어졌거나 실패한 경우도 그 사실을 담아 보낸다.
 - **수동**: 로그인 후 대시보드의 "리포트 재생성" 버튼, 또는
   `POST /api/reports/regenerate` 직접 호출.
+
+## 휴장일에는 모든 스케줄이 건너뛴다 (DESIGN.md §15)
+
+평일이어도 국경일·임시공휴일이면 시장이 열리지 않는다. 그런 날 스케줄이 돌면 전
+거래일 수치를 그날 날짜로 기록하게 되므로, 모든 cron이 실행 전에 개장 여부를 확인한다.
+
+판정 근거는 네이버 랭킹 응답의 `marketStatus`인데, 이 값은 **장중에만** 쓸 수 있다 —
+장 마감 후에는 휴장일과 정상 거래일이 모두 `CLOSE`로 보인다. 그래서 정규장 한가운데인
+**13:00에 확인 전용 cron**(`/api/cron/market-status`)을 두고 결과를 `MarketDayStatus`
+테이블에 남기고, 이후 cron들이 그 기록을 읽는다.
+
+| 시각(KST) | cron | 하는 일 |
+| --- | --- | --- |
+| 13:00 | `/api/cron/market-status` | 개장 여부 확인·기록 |
+| 15:45 | `/api/cron/daily-briefing` | 브리핑 Notion 기록 |
+| 16:00 | `/api/cron/generate-report` | 리포트 생성 |
+| 17:00 | `/api/cron/final-recommendation` | 최종 추천 + 카카오톡 알림 |
+
+휴장일이면 뒤의 세 작업이 `{"status":"skipped","reason":"non-trading-day"}`를 돌려주고
+끝낸다. 카카오톡도 가지 않는다. 13시 기록이 없으면(cron 누락) **실행하는 쪽으로**
+판단하고 응답에 `marketDayCheck: "no-record"`를 남긴다 — 정상 거래일을 잃는 것이
+휴장일에 잘못 실행하는 것보다 나쁘기 때문이다.
+
+**화면의 재생성 버튼에는 이 가드를 두지 않는다.** 사람이 누른 것은 의도로 본다.
+13시 판정이 잘못돼 그날 자동 실행이 모두 건너뛰어졌을 때 이 버튼들이 복구 수단이
+된다. 버튼은 세 곳에 있다.
+
+| 화면 | 버튼 | 호출 |
+| --- | --- | --- |
+| 전략 1~4 리포트 | 리포트 재생성 | `POST /api/reports/regenerate` |
+| 종합 추천 | 종합 추천 다시 실행 | `POST /api/final-recommendation/regenerate` |
+| 오늘의 브리핑 | Notion에 다시 기록 | `POST /api/briefing/regenerate` |
+
+브리핑 버튼의 이름이 "재생성"이 아닌 이유는, 화면이 열 때마다 네이버를 조회해 늘
+최신이기 때문이다. 이 버튼이 고치는 대상은 Notion 기록이다.
+
+이 기능은 **DB 마이그레이션이 필요하다.** 배포 전에 `npx prisma migrate deploy`를 실행한다.
 
 ## 당일 상한가 / 거래량 브리핑 (DESIGN.md §14)
 

@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { sendReportReadyEmail } from "@/lib/email";
-import { notifyAllKakaoRecipients } from "@/lib/dataSources/kakao";
 import { runStrategy1 } from "./strategy1";
 import { runStrategy2 } from "./strategy2";
 import { runStrategy3 } from "./strategy3";
@@ -131,14 +130,10 @@ export async function generateDailyReport(): Promise<{ reportRunId: string; stat
     console.error("리포트 완료 이메일 발송 실패:", err);
   });
 
-  const dateStr = runDate.toISOString().slice(0, 10);
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "";
-  await notifyAllKakaoRecipients(
-    `[데일리 스크리너] ${dateStr}자 리포트가 준비됐습니다.`,
-    `${baseUrl}/dashboard/strategy1`
-  ).catch((err) => {
-    console.error("카카오톡 알림 발송 실패:", err);
-  });
+  // 카카오톡 알림은 여기서 보내지 않는다. 리포트가 끝나도 최종 추천(§13)이 아직
+  // 남아 있어, 이 시점에 알리면 받는 사람이 들어가도 최종 추천이 비어 있다. 하루
+  // 일과의 마지막인 최종 추천 cron이 끝난 뒤 한 번만 보낸다
+  // (src/app/api/cron/final-recommendation/route.ts).
 
   return { reportRunId: reportRun.id, status };
 }
