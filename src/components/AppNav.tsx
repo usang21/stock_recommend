@@ -12,6 +12,9 @@ export function AppNav() {
           <Link href="/dashboard/strategy1" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             리포트
           </Link>
+          <Link href="/briefing" className="hover:text-neutral-900 dark:hover:text-neutral-100">
+            오늘의 브리핑
+          </Link>
           <Link href="/history" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             히스토리
           </Link>
