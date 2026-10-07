@@ -30,3 +30,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   3. 가능하면 실제로 동작을 확인한다(로컬 리포트 재생성, 또는 배포 후
      `/api/cron/generate-report`를 직접 호출해 `status`/`errorMessage` 확인 등).
      README의 각 기능 절 참고.
+
+# 백로그
+
+할 일·아이디어·추적 중인 리스크는 `BACKLOG.md`에 있다. 다음에 무엇을 할지 고를
+때는 이 문서를 먼저 읽는다. 작업 중에 새로 알게 된 할 일이나 리스크는 README에
+흩어 적지 말고 `BACKLOG.md`에 항목으로 추가한다(사용 규칙은 문서 안에 있다).
+구현이 끝난 항목은 백로그에서 지우고 `DESIGN.md`/`README.md`로 옮긴다 — 완료
+기록은 git 이력이 담당한다.
