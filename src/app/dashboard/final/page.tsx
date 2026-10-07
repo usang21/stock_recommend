@@ -13,11 +13,12 @@ export default function FinalRecommendationPage() {
       </div>
       <StrategyTabs basePath="/dashboard" active="final" extraTabs={[FINAL_RECOMMENDATION_TAB]} />
       <div className="mb-6 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <p className="mb-2 font-semibold">전략 1~4를 종합해 매수 우선순위 상위 5개를 추천합니다</p>
+        <p className="mb-2 font-semibold">전략 1~4를 종합해 매수 우선순위를 최대 5개까지 추천합니다</p>
         <ol className="list-decimal space-y-1 pl-5 text-neutral-600 dark:text-neutral-400">
           <li>각 전략의 최종 단계를 통과한 종목만 후보로 삼습니다 (여러 전략 중복 통과 = 강한 신호)</li>
           <li>과거 추천의 상승/하락 결과에서 얻은 학습 기록을 판단에 반영합니다</li>
-          <li>상위 5개는 순위와 근거를, 나머지 후보는 제외 사유를 함께 보여줍니다</li>
+          <li>5개는 상한입니다 — 추천 자격을 넘는 종목만 올리므로 0~5개로 나옵니다</li>
+          <li>추천된 종목은 순위와 근거를, 나머지 후보는 제외 사유를 함께 보여줍니다</li>
         </ol>
         <p className="mt-3 text-xs text-neutral-500">
           판단 기준과 학습 기록은{" "}

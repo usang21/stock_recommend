@@ -14,8 +14,11 @@ import type { FinalRecommendationRunResult } from "./run";
 function messageFor(result: FinalRecommendationRunResult): { text: string; path: string } {
   if (result.status === "success") {
     const count = result.recommendedCount ?? 0;
+    // 추천 0개는 실패가 아니라 "자격을 넘는 종목이 없었다"는 결론이다(§13). 숫자만
+    // 보내면 받는 사람이 생성 실패로 읽으므로 문구로 구분해준다.
+    const summary = count === 0 ? "추천 자격을 넘는 종목이 없었습니다" : `추천 ${count}개`;
     return {
-      text: `[데일리 스크리너] ${result.runDate}자 리포트와 최종 추천이 준비됐습니다. (추천 ${count}개)`,
+      text: `[데일리 스크리너] ${result.runDate}자 리포트와 최종 추천이 준비됐습니다. (${summary})`,
       path: "/dashboard/final",
     };
   }
