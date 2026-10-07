@@ -39,6 +39,25 @@ export async function loadOutcomeAnalysisPrompt(): Promise<string> {
   return readSkillFile("OUTCOME_ANALYSIS.md");
 }
 
+/**
+ * 저장소의 SKILL.md 원문을 criteria의 새 버전으로 올린다.
+ *
+ * criteria는 한 번 심은 뒤로는 DB 쪽이 실제로 쓰이는 값이라, 저장소의 SKILL.md를
+ * 고쳐도 이미 돌고 있는 배포에는 반영되지 않는다. 기준을 코드와 함께 바꿨을 때
+ * 사람이 md 본문을 손으로 복사해 붙이지 않아도 되게 하는 통로다. 덮어쓰는 것이
+ * 아니라 새 버전으로 쌓이므로, 사람이 웹에서 고친 내용이 있었다면 이력과 diff에
+ * 그대로 남는다.
+ */
+export async function reloadCriteriaFromSkillFile(): Promise<LogicVersion> {
+  const content = await readSkillFile("SKILL.md");
+  return saveLogicVersion(
+    "criteria",
+    content,
+    "human",
+    "저장소의 skills/final-recommendation/SKILL.md 내용을 다시 불러왔습니다."
+  );
+}
+
 export interface LogicVersion {
   version: number;
   content: string;

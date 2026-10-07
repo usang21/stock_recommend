@@ -1,6 +1,7 @@
 /**
  * 최종 추천 Agent (DESIGN.md §13).
- * 전략1~4의 최종 통과 종목을 종합해 상위 5개를 순위와 근거로 추천한다.
+ * 전략1~4의 최종 통과 종목을 종합해 추천 자격을 넘는 종목만 순위와 근거로 추천한다
+ * (최대 5개, 자격 미달이면 0개).
  * 판단 기준은 추천 로직 저장소(logicStore)의 criteria 버전을 쓰고, 학습 기록은
  * 프롬프트에 함께 넣어 피드백 루프의 관찰이 추천에 반영되게 한다.
  */
@@ -79,7 +80,8 @@ export async function recommendFinalPicks(candidates: Candidate[]): Promise<Reco
     "",
     lesson.content,
     "",
-    `위 판단 기준에 따라 상위 ${MAX_RECOMMENDATIONS}개를 순위와 근거로 고르고, JSON 하나만 응답하라.`,
+    `위 판단 기준의 "추천 자격"을 넘는 종목만 순위와 근거로 고르고, JSON 하나만 응답하라.`,
+    `${MAX_RECOMMENDATIONS}개는 상한이지 목표가 아니다 — 자격을 넘는 종목이 ${MAX_RECOMMENDATIONS}개보다 적으면 있는 만큼만, 하나도 없으면 빈 배열로 응답하고 후보 전부를 excluded에 넣어라. 빈 자리를 채우려고 근거가 약한 종목을 올리지 마라.`,
   ].join("\n");
 
   const text = await completeChat(criteria, userPrompt, { maxTokens: 4096 });
@@ -91,7 +93,13 @@ export async function recommendFinalPicks(candidates: Candidate[]): Promise<Reco
   const byCode = new Map(candidates.map((c) => [c.code, c]));
   const seen = new Set<string>();
 
-  const recommendations = (Array.isArray(parsed.recommendations) ? parsed.recommendations : [])
+  // 추천 0개는 정상적인 결론("오늘은 자격을 넘는 종목이 없었다")이므로, 키 자체가
+  // 없는 응답 형식 오류와 구분한다. 빈 배열은 그대로 받아들인다.
+  if (!Array.isArray(parsed.recommendations)) {
+    throw new Error(`추천 모델 응답에 recommendations 배열이 없습니다: ${text.slice(0, 300)}`);
+  }
+
+  const recommendations = parsed.recommendations
     .filter((r) => typeof r?.code === "string" && byCode.has(r.code) && typeof r?.reason === "string")
     .map((r) => ({ code: r.code as string, rank: Number(r.rank), reason: (r.reason as string).trim() }))
     .filter((r) => {
@@ -103,8 +111,12 @@ export async function recommendFinalPicks(candidates: Candidate[]): Promise<Reco
     .slice(0, MAX_RECOMMENDATIONS)
     .map((r, i) => ({ ...r, rank: i + 1 })); // 모델이 매긴 순위에 구멍이 있어도 1..N으로 다시 매긴다
 
-  if (recommendations.length === 0 && candidates.length > 0) {
-    throw new Error("추천 모델이 후보 중 어떤 종목도 추천하지 않았습니다 (응답 형식 오류로 보입니다).");
+  // 모델이 종목을 올렸는데 하나도 살아남지 못한 경우만 오류로 본다 — 입력에 없는
+  // 종목코드를 지어냈거나 reason이 빠진 응답이고, 추천 0개와는 성격이 다르다.
+  if (recommendations.length === 0 && parsed.recommendations.length > 0) {
+    throw new Error(
+      `추천 모델이 올린 ${parsed.recommendations.length}개 종목이 모두 유효하지 않습니다 (입력에 없는 종목코드이거나 reason 누락): ${text.slice(0, 300)}`
+    );
   }
 
   const excludedFromModel = new Map(
@@ -119,7 +131,7 @@ export async function recommendFinalPicks(candidates: Candidate[]): Promise<Reco
     .filter((c) => !seen.has(c.code))
     .map((c) => ({
       code: c.code,
-      reason: excludedFromModel.get(c.code) ?? "상위 5개에 들지 못했습니다 (모델이 사유를 제시하지 않음).",
+      reason: excludedFromModel.get(c.code) ?? "추천 자격에 미달했습니다 (모델이 사유를 제시하지 않음).",
     }));
 
   return { recommendations, excluded, criteriaVersion, lessonVersion: lesson.version };

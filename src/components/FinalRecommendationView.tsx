@@ -231,7 +231,11 @@ export function FinalRecommendationView() {
 
       <h3 className="mb-2 text-base font-semibold">추천 종목 ({data.recommendations.length}개)</h3>
       {data.recommendations.length === 0 ? (
-        <p className="py-8 text-center text-sm text-neutral-500">추천된 종목이 없습니다.</p>
+        <p className="py-8 text-center text-sm text-neutral-500">
+          {data.excluded.length > 0
+            ? `추천 자격을 넘는 종목이 없었습니다. 후보 ${data.excluded.length}개는 아래에서 제외 사유와 함께 확인할 수 있습니다.`
+            : "오늘은 전략을 최종 통과한 후보 자체가 없었습니다."}
+        </p>
       ) : (
         <ul className="space-y-2">
           {data.recommendations.map((item) => (

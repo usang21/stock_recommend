@@ -24,7 +24,7 @@ const KIND_TABS: { key: LogicKind; label: string; description: string }[] = [
     key: "criteria",
     label: "판단 기준",
     description:
-      "사람이 정한 추천 기준입니다. 처음에는 skills/final-recommendation/SKILL.md에서 가져오며, 여기서 수정하면 다음 실행부터 반영됩니다.",
+      "사람이 정한 추천 기준입니다. 처음에는 skills/final-recommendation/SKILL.md에서 가져오고, 그 뒤로는 여기 있는 내용이 실제로 쓰입니다 — 저장소의 md를 고쳤다면 아래 '다시 불러오기'로 올려야 반영됩니다. 수정은 다음 실행부터 적용됩니다.",
   },
   {
     key: "lesson",
@@ -84,6 +84,7 @@ export function RecommendationLogicView() {
   const [draft, setDraft] = useState("");
   const [changeReason, setChangeReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reloadingFile, setReloadingFile] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<number | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,24 @@ export function RecommendationLogicView() {
       alert("저장에 실패했습니다.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // 저장소의 SKILL.md를 고쳐도 DB 쪽 criteria가 실제로 쓰이는 값이라 반영되지
+  // 않는다. 그 간극을 사람이 손으로 복사해 메우지 않도록 둔 버튼이다.
+  async function handleReloadFromFile() {
+    if (!confirm("저장소의 SKILL.md 내용을 새 버전으로 올립니다. 지금 편집 중인 내용은 반영되지 않습니다. 계속할까요?")) {
+      return;
+    }
+    setReloadingFile(true);
+    try {
+      const res = await fetch(`/api/recommendation-logic/${kind}`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      setReloadToken((v) => v + 1);
+    } catch {
+      alert("파일에서 다시 불러오지 못했습니다.");
+    } finally {
+      setReloadingFile(false);
     }
   }
 
@@ -172,6 +191,15 @@ export function RecommendationLogicView() {
               placeholder="변경 사유 (이력에 남습니다)"
               className="min-w-64 flex-1 rounded border border-neutral-300 bg-transparent px-2 py-1.5 text-sm dark:border-neutral-700"
             />
+            {kind === "criteria" && (
+              <button
+                onClick={handleReloadFromFile}
+                disabled={reloadingFile || saving}
+                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              >
+                {reloadingFile ? "불러오는 중..." : "SKILL.md에서 다시 불러오기"}
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={saving || !dirty}

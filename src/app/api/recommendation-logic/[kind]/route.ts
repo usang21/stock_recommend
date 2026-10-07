@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentLogic, listLogicVersions, saveLogicVersion, type LogicKind } from "@/lib/recommendation/logicStore";
+import {
+  getCurrentLogic,
+  listLogicVersions,
+  reloadCriteriaFromSkillFile,
+  saveLogicVersion,
+  type LogicKind,
+} from "@/lib/recommendation/logicStore";
 
 function parseKind(value: string): LogicKind | null {
   return value === "criteria" || value === "lesson" ? value : null;
@@ -40,5 +46,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       : "웹 화면에서 직접 수정했습니다.";
 
   const saved = await saveLogicVersion(kind, body.content, "human", changeReason);
+  return NextResponse.json({ version: saved.version });
+}
+
+/**
+ * 저장소의 SKILL.md 내용을 criteria의 새 버전으로 올린다 (판단 기준 전용).
+ * 학습 기록(lesson)은 파일 원본이 없으므로 대상이 아니다.
+ */
+export async function POST(_request: Request, { params }: { params: Promise<{ kind: string }> }) {
+  const kind = parseKind((await params).kind);
+  if (kind !== "criteria") {
+    return NextResponse.json({ error: "판단 기준만 파일에서 다시 불러올 수 있습니다." }, { status: 400 });
+  }
+
+  const saved = await reloadCriteriaFromSkillFile();
   return NextResponse.json({ version: saved.version });
 }
