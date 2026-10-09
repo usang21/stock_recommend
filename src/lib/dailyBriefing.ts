@@ -129,8 +129,15 @@ function dartUrl(name: string): string {
   return `https://dart.fss.or.kr/dsab001/main.do?textCrpNm=${encodeURIComponent(name)}`;
 }
 
+/**
+ * 종목 시세 페이지.
+ *
+ * 구 주소(`finance.naver.com/item/main.naver?code=`)를 쓰면 모바일에서 종목코드가
+ * 사라지고 `m.stock.naver.com` 홈으로 떨어진다(데스크톱에서는 정상 리다이렉트되므로
+ * 폰으로 열어봐야 드러난다). 현행 주소는 양쪽 모두에서 해당 종목으로 간다.
+ */
 function quoteUrl(code: string): string {
-  return `https://finance.naver.com/item/main.naver?code=${code}`;
+  return `https://stock.naver.com/domestic/stock/${code}/price`;
 }
 
 function toBriefingStock(row: NaverStockRow): BriefingStock {
