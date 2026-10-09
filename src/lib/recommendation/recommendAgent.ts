@@ -6,7 +6,7 @@
  * 프롬프트에 함께 넣어 피드백 루프의 관찰이 추천에 반영되게 한다.
  */
 import { completeChat, parseJsonObject } from "@/lib/llm";
-import { getCurrentLogic, loadCriteriaPrompt } from "./logicStore";
+import { getCurrentLogic, loadCriteria } from "./logicStore";
 
 export interface Candidate {
   code: string;
@@ -67,9 +67,10 @@ interface RawResponse {
 }
 
 export async function recommendFinalPicks(candidates: Candidate[]): Promise<RecommendationResult> {
-  const criteria = await loadCriteriaPrompt();
+  // 저장소의 SKILL.md가 바뀌었으면 여기서 자동으로 새 버전이 되어 그 내용이 쓰인다.
+  const criteria = await loadCriteria();
   const lesson = await getCurrentLogic("lesson");
-  const criteriaVersion = (await getCurrentLogic("criteria")).version;
+  const criteriaVersion = criteria.version;
 
   const userPrompt = [
     `오늘 전략1~4의 최종 단계를 통과한 종목은 다음 ${candidates.length}개다.`,
@@ -84,7 +85,7 @@ export async function recommendFinalPicks(candidates: Candidate[]): Promise<Reco
     `${MAX_RECOMMENDATIONS}개는 상한이지 목표가 아니다 — 자격을 넘는 종목이 ${MAX_RECOMMENDATIONS}개보다 적으면 있는 만큼만, 하나도 없으면 빈 배열로 응답하고 후보 전부를 excluded에 넣어라. 빈 자리를 채우려고 근거가 약한 종목을 올리지 마라.`,
   ].join("\n");
 
-  const text = await completeChat(criteria, userPrompt, { maxTokens: 4096 });
+  const text = await completeChat(criteria.content, userPrompt, { maxTokens: 4096 });
   const parsed = parseJsonObject(text) as RawResponse | null;
   if (!parsed) {
     throw new Error(`추천 모델 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
