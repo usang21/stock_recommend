@@ -45,3 +45,6 @@ next-env.d.ts
 .agents/
 .claude/
 skills-lock.json
+
+# subagent 검토 보고서 (특정 커밋 시점 기준이라 금방 낡는다)
+/review-result/
