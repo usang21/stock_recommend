@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getCriteriaFileStatus,
   getCurrentLogic,
   listLogicVersions,
   reloadCriteriaFromSkillFile,
@@ -17,9 +18,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ kin
   if (!kind) return NextResponse.json({ error: "알 수 없는 종류입니다." }, { status: 400 });
 
   const [current, versions] = await Promise.all([getCurrentLogic(kind), listLogicVersions(kind)]);
+  // 판단 기준은 저장소의 파일과 어긋날 수 있어, 화면이 그 사실을 띄울 수 있게 함께 준다.
+  const fileStatus = kind === "criteria" ? await getCriteriaFileStatus() : null;
   return NextResponse.json({
     kind,
     current: { version: current.version, content: current.content },
+    fileStatus,
     versions: versions.map((v) => ({
       version: v.version,
       content: v.content,

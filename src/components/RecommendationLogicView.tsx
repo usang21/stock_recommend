@@ -13,9 +13,16 @@ interface LogicVersion {
   createdAt: string;
 }
 
+interface CriteriaFileStatus {
+  currentFromFile: boolean;
+  fileDiffers: boolean;
+  fileUnavailable: boolean;
+}
+
 interface LogicData {
   kind: LogicKind;
   current: { version: number; content: string };
+  fileStatus: CriteriaFileStatus | null;
   versions: LogicVersion[];
 }
 
@@ -24,7 +31,7 @@ const KIND_TABS: { key: LogicKind; label: string; description: string }[] = [
     key: "criteria",
     label: "판단 기준",
     description:
-      "사람이 정한 추천 기준입니다. 처음에는 skills/final-recommendation/SKILL.md에서 가져오고, 그 뒤로는 여기 있는 내용이 실제로 쓰입니다 — 저장소의 md를 고쳤다면 아래 '다시 불러오기'로 올려야 반영됩니다. 수정은 다음 실행부터 적용됩니다.",
+      "사람이 정한 추천 기준입니다. 원본은 skills/final-recommendation/SKILL.md이고, 그 파일을 고쳐 배포하면 다음 실행에서 자동으로 새 버전이 됩니다. 여기서 직접 고치면 그때부터 이 내용이 쓰이고 파일 자동 반영은 멈춥니다 — 다시 파일을 따르려면 아래 '다시 불러오기'를 누릅니다. 수정은 다음 실행부터 적용됩니다.",
   },
   {
     key: "lesson",
@@ -127,8 +134,8 @@ export function RecommendationLogicView() {
     }
   }
 
-  // 저장소의 SKILL.md를 고쳐도 DB 쪽 criteria가 실제로 쓰이는 값이라 반영되지
-  // 않는다. 그 간극을 사람이 손으로 복사해 메우지 않도록 둔 버튼이다.
+  // 평소에는 추천 실행이 파일 변경을 자동 반영한다. 이 버튼은 사람이 웹에서 고쳐
+  // 자동 반영이 멈춘 상태에서, 다시 파일 쪽을 따르겠다고 결정했을 때 쓴다.
   async function handleReloadFromFile() {
     if (!confirm("저장소의 SKILL.md 내용을 새 버전으로 올립니다. 지금 편집 중인 내용은 반영되지 않습니다. 계속할까요?")) {
       return;
@@ -172,6 +179,19 @@ export function RecommendationLogicView() {
         <p className="py-12 text-center text-sm text-neutral-500">불러오는 중...</p>
       ) : (
         <>
+          {data.fileStatus?.fileDiffers && !data.fileStatus.currentFromFile && (
+            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              <strong className="font-semibold">저장소의 SKILL.md와 내용이 다릅니다.</strong> 이 버전은 웹에서 직접
+              수정한 것이라 파일 변경이 자동으로 반영되지 않습니다. 파일 쪽을 따르려면 아래 &apos;SKILL.md에서 다시
+              불러오기&apos;를 누르세요. 지금 내용을 유지할 것이면 그대로 두면 됩니다.
+            </div>
+          )}
+          {data.fileStatus?.fileUnavailable && (
+            <div className="mb-3 rounded-lg border border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+              저장소의 SKILL.md를 읽을 수 없어 파일과의 차이를 확인하지 못했습니다. DB에 있는 아래 내용이 그대로
+              쓰입니다.
+            </div>
+          )}
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-semibold">
               현재 내용 <span className="text-neutral-400">v{data.current.version}</span>
@@ -224,7 +244,11 @@ export function RecommendationLogicView() {
                     <span className="block text-sm">{version.changeReason}</span>
                     <span className="mt-0.5 block text-xs text-neutral-400">
                       {formatDateTime(version.createdAt)} ·{" "}
-                      {version.changedBy === "human" ? "사람이 직접 수정" : "시스템"}
+                      {version.changedBy === "human"
+                        ? "사람이 직접 수정"
+                        : version.changedBy === "file"
+                          ? "저장소 파일에서 반영"
+                          : "시스템"}
                     </span>
                   </span>
                   <span className="text-xs text-neutral-400">{expandedVersion === version.version ? "접기" : "차이 보기"}</span>

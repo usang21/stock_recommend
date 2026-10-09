@@ -165,7 +165,7 @@ model RecommendationLogicVersion {
   kind         String // "criteria"(사람이 정한 판단 기준) | "lesson"(피드백 루프가 쌓은 학습 기록)
   version      Int // kind별로 1부터 증가
   content      String // 해당 시점의 md 본문 전체 스냅샷
-  changedBy    String // "agent" | "human"
+  changedBy    String // "file"(저장소 SKILL.md에서 올라옴) | "human"(웹에서 직접 수정) | "agent"(피드백 루프)
   changeReason String
   createdAt    DateTime @default(now())
 
