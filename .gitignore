@@ -43,7 +43,8 @@ next-env.d.ts
 
 # Claude Code local tooling state (installed skills cache, session locks)
 .agents/
-.claude/
+.claude/*
+!.claude/agents/
 skills-lock.json
 
 # subagent 검토 보고서 (특정 커밋 시점 기준이라 금방 낡는다)
