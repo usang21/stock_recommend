@@ -109,15 +109,13 @@ export async function generateFinalRecommendation(): Promise<FinalRecommendation
       })
     : await prisma.finalRecommendationRun.create({ data: { runDate, status: "running" } });
 
-  // 재실행이면 이번 회차의 추천 종목만 지운다. 과거 회차의 추천 기록(memory)은
-  // 피드백 루프의 입력이므로 건드리지 않는다.
-  await prisma.recommendationPick.deleteMany({ where: { runId: run.id } });
-
   try {
     const review = await reviewPastRecommendations(runDateLabel);
 
     const candidates = collectCandidates(report);
     if (candidates.length === 0) {
+      // 후보가 없는 회차의 올바른 결과는 pick 0건이다. 재실행이면 여기서 지운다.
+      await prisma.recommendationPick.deleteMany({ where: { runId: run.id } });
       await prisma.finalRecommendationRun.update({
         where: { id: run.id },
         data: { status: "success", errorMessage: null },
@@ -128,31 +126,37 @@ export async function generateFinalRecommendation(): Promise<FinalRecommendation
     const result = await recommendFinalPicks(candidates);
     const byCode = new Map(candidates.map((c) => [c.code, c]));
 
-    await prisma.recommendationPick.createMany({
-      data: [
-        ...result.recommendations.map((r) => ({
-          runId: run.id,
-          rank: r.rank,
-          isRecommended: true,
-          stockCode: r.code,
-          stockName: byCode.get(r.code)!.name,
-          reason: r.reason,
-          basePrice: byCode.get(r.code)!.price,
-          strategyKeys: byCode.get(r.code)!.strategyKeys,
-          recommendedAt: runDate,
-        })),
-        ...result.excluded.map((e) => ({
-          runId: run.id,
-          isRecommended: false,
-          stockCode: e.code,
-          stockName: byCode.get(e.code)!.name,
-          reason: e.reason,
-          basePrice: byCode.get(e.code)!.price,
-          strategyKeys: byCode.get(e.code)!.strategyKeys,
-          recommendedAt: runDate,
-        })),
-      ],
-    });
+    // 재실행이면 이번 회차의 추천 종목만 지우고 새 결과를 넣는다. 지우는 것과 넣는
+    // 것을 한 트랜잭션으로 묶어, 중간에 실패해도 회차가 pick 없는 상태로 남지 않게
+    // 한다. 과거 회차의 추천 기록(memory)은 피드백 루프의 입력이므로 건드리지 않는다.
+    await prisma.$transaction([
+      prisma.recommendationPick.deleteMany({ where: { runId: run.id } }),
+      prisma.recommendationPick.createMany({
+        data: [
+          ...result.recommendations.map((r) => ({
+            runId: run.id,
+            rank: r.rank,
+            isRecommended: true,
+            stockCode: r.code,
+            stockName: byCode.get(r.code)!.name,
+            reason: r.reason,
+            basePrice: byCode.get(r.code)!.price,
+            strategyKeys: byCode.get(r.code)!.strategyKeys,
+            recommendedAt: runDate,
+          })),
+          ...result.excluded.map((e) => ({
+            runId: run.id,
+            isRecommended: false,
+            stockCode: e.code,
+            stockName: byCode.get(e.code)!.name,
+            reason: e.reason,
+            basePrice: byCode.get(e.code)!.price,
+            strategyKeys: byCode.get(e.code)!.strategyKeys,
+            recommendedAt: runDate,
+          })),
+        ],
+      }),
+    ]);
 
     await prisma.finalRecommendationRun.update({
       where: { id: run.id },
