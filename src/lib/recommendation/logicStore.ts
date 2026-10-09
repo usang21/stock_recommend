@@ -32,6 +32,8 @@ export type LogicKind = "criteria" | "lesson";
 export type LogicChangedBy = "agent" | "human" | "file";
 
 const FILE_RELOAD_REASON = "저장소의 skills/final-recommendation/SKILL.md 내용을 올렸습니다.";
+const FOLLOW_FILE_AGAIN_REASON =
+  "저장소의 skills/final-recommendation/SKILL.md를 다시 따르기로 했습니다 (내용은 그대로, 파일 자동 반영이 켜집니다).";
 
 /**
  * `changedBy: "file"`을 쓰기 전에 만들어진 버전들의 사유 문구.
@@ -133,6 +135,16 @@ export async function loadOutcomeAnalysisPrompt(): Promise<string> {
  */
 export async function reloadCriteriaFromSkillFile(): Promise<LogicVersion> {
   const content = await readSkillFile("SKILL.md");
+  const current = await getCurrentLogic("criteria");
+
+  if (current.content === content) {
+    // 내용이 같아도, 사람이 고친 상태였다면 버전을 하나 남긴다. 이 기록이 없으면
+    // 현재 버전의 출처가 "human"으로 남아 파일 자동 반영이 계속 멈춘다 — 웹에서 고친
+    // 내용을 파일에 똑같이 옮겨 확정하는 경로에서 실제로 걸린다.
+    if (isFromSkillFile(current)) return current;
+    return createLogicVersion("criteria", current.version + 1, content, "file", FOLLOW_FILE_AGAIN_REASON);
+  }
+
   return saveLogicVersion("criteria", content, "file", FILE_RELOAD_REASON);
 }
 
@@ -168,6 +180,19 @@ export async function getCurrentLogic(kind: LogicKind): Promise<LogicVersion> {
   return created;
 }
 
+/** 중복 제거 없이 버전을 만든다. 내용이 같아도 기록을 남겨야 하는 경우에만 쓴다. */
+async function createLogicVersion(
+  kind: LogicKind,
+  version: number,
+  content: string,
+  changedBy: LogicChangedBy,
+  changeReason: string
+): Promise<LogicVersion> {
+  return prisma.recommendationLogicVersion.create({
+    data: { kind, version, content, changedBy, changeReason },
+  });
+}
+
 /** 새 버전을 추가한다. 내용이 직전 버전과 같으면 아무것도 하지 않는다. */
 export async function saveLogicVersion(
   kind: LogicKind,
@@ -178,9 +203,7 @@ export async function saveLogicVersion(
   const current = await getCurrentLogic(kind);
   if (current.content === content) return current;
 
-  return prisma.recommendationLogicVersion.create({
-    data: { kind, version: current.version + 1, content, changedBy, changeReason },
-  });
+  return createLogicVersion(kind, current.version + 1, content, changedBy, changeReason);
 }
 
 /** 학습 기록 맨 끝에 이번 회차의 관찰을 한 항목으로 덧붙인다. */
