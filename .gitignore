@@ -41,10 +41,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Claude Code local tooling state (installed skills cache, session locks)
+# Claude Code local tooling state (installed skills cache, session locks).
+# 리뷰어 서브에이전트는 더 이상 여기 없다 - ~/.claude/agents/(전역)로 옮겼다.
 .agents/
-.claude/*
-!.claude/agents/
+.claude/
 skills-lock.json
 
 # subagent 검토 보고서 (특정 커밋 시점 기준이라 금방 낡는다)
