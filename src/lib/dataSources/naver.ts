@@ -177,10 +177,43 @@ export interface NaverTrendRow {
   tradeVolume: string;
 }
 
+// 2026-10-26 확인: `/domestic/detail/{code}/trend`가 404로 사라지고
+// `/stockSecurity/investor-trend/v2/domestic/{code}`로 바뀌었다(응답 필드명도
+// 전부 변경). exchangeType은 소문자(krx/nxt/all)만 허용하며, 페이지네이션도
+// startIdx/pageSize 대신 size+cursor(hasNext) 방식으로 바뀌었다. KRX 거래소
+// 데이터만 쓰던 기존 동작(tradeType=KRX)을 유지하기 위해 krx 필드만 사용한다.
+interface NaverInvestorTrendMarketData {
+  foreignNetVolume: string;
+  organizationNetVolume: string;
+  individualNetVolume: string;
+  closingPrice: string;
+  tradingVolume: string;
+}
+
+interface NaverInvestorTrendItem {
+  localTradedAt: string; // YYYY-MM-DD
+  krx: NaverInvestorTrendMarketData | null;
+}
+
+interface NaverInvestorTrendResponse {
+  items: NaverInvestorTrendItem[];
+}
+
 export async function getInstitutionalTrend(code: string, days = 15): Promise<NaverTrendRow[]> {
-  return getJson<NaverTrendRow[]>(
-    `${STOCK_API_BASE}/domestic/detail/${code}/trend?tradeType=KRX&startIdx=0&pageSize=${days}`
+  const res = await getJson<NaverInvestorTrendResponse>(
+    `${STOCK_API_BASE}/stockSecurity/investor-trend/v2/domestic/${code}?exchangeType=krx&size=${days}`
   );
+  return res.items
+    .filter((item): item is NaverInvestorTrendItem & { krx: NaverInvestorTrendMarketData } => item.krx != null)
+    .map((item) => ({
+      itemCode: code,
+      bizdate: item.localTradedAt.replace(/-/g, ""),
+      organPureBuyQuant: item.krx.organizationNetVolume,
+      foreignerPureBuyQuant: item.krx.foreignNetVolume,
+      individualPureBuyQuant: item.krx.individualNetVolume,
+      closePrice: item.krx.closingPrice,
+      tradeVolume: item.krx.tradingVolume,
+    }));
 }
 
 /** 종목코드로 종목명을 조회한다 (종목 상세 페이지 제목 등에 사용). */
