@@ -11,6 +11,8 @@
  *
  * 최소 시가총액 기준은 적용하지 않는다. 시총이 작아도 상한가에 들었다는 사실 자체는
  * 알 가치가 있다고 보고, 거르지 않고 보여준다 (`meetsMinMarketCap`은 호출하지 않는다).
+ * 다만 전략 공통 기준(1000억원) 미만이면 `isSmallCap`을 표시해, Notion에 쓸 때
+ * "분석" 속성을 "소형주"로 자동 설정한다(검토 우선순위를 가늠하는 용도).
  */
 import {
   getStockCandles,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/dataSources/naver";
 import { mapWithConcurrency } from "@/lib/concurrency";
 import { buildExcludedUniverse, filterUniverse } from "@/lib/strategies/universe";
+import { MIN_MARKET_CAP } from "@/lib/strategies/defaultParams";
 
 /**
  * 대량거래 판정 기준. 거래량(주식 수)과 거래대금(금액) 중 **하나만 넘겨도** 포함한다.
@@ -83,6 +86,8 @@ export interface BriefingStock {
   /** 직전 거래일 평균 대비 배수. 일봉이 부족해 판정하지 못한 경우 null. */
   volumeRatio: number | null;
   tradingValueRatio: number | null;
+  /** 전략 공통 최소 시가총액(1000억원) 미달 여부. Notion "분석" 속성 자동 설정에 쓴다. */
+  isSmallCap: boolean;
   tags: BriefingTag[];
   newsUrl: string;
   dartUrl: string;
@@ -151,6 +156,7 @@ function toBriefingStock(row: NaverStockRow): BriefingStock {
     tradingValue: Number(row.tradeAmount),
     volumeRatio: null,
     tradingValueRatio: null,
+    isSmallCap: Number(row.marketSum) < MIN_MARKET_CAP,
     tags: [],
     newsUrl: newsUrl(row.itemname, row.itemcode),
     dartUrl: dartUrl(row.itemname),

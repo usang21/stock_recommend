@@ -2,7 +2,10 @@
  * Notion 데이터베이스에 당일 브리핑을 종목당 한 행으로 기록한다 (DESIGN.md §14).
  *
  * 같은 거래일에 다시 실행하면 그날 행을 먼저 휴지통으로 옮기고 다시 쓴다. Cron
- * 재시도나 수동 재실행에서 행이 중복되지 않게 하기 위한 것이다.
+ * 재시도나 수동 재실행에서 행이 중복되지 않게 하기 위한 것이다. 다만 "분석" 속성이
+ * 이미 "분석완료"로 표시된 행은 사람이 직접 검토를 마쳤다는 뜻이므로 휴지통으로
+ * 옮기지 않고 그대로 둔다(해당 종목은 새로 쓰지도 않는다) — 재실행이 검토 기록을
+ * 지우지 않게 하기 위한 것이다.
  *
  * Notion은 동작을 `Notion-Version` 헤더에 고정한다. 2025-09-03부터 데이터베이스가
  * 하나 이상의 "데이터 소스"로 나뉘고 행 조회·생성이 그쪽으로 옮겨갔는데, 공식
@@ -33,7 +36,15 @@ const PROP = {
   news: "뉴스",
   dart: "공시",
   quote: "시세",
+  analysis: "분석",
 } as const;
+
+/** 시가총액 1000억원 미만 종목에 자동으로 세팅하는 "분석" 속성 값. 노션에서 수동으로
+ *  "분석완료"로 바꾸면 이 값은 덮어써진다 — 단일 선택 속성이라 하나만 남는다. */
+const SMALL_CAP_ANALYSIS_OPTION = "소형주";
+
+/** 사람이 "분석" 속성을 이 값으로 바꾸면 재실행 시 보존 대상이 된다. */
+const ANALYSIS_DONE_OPTION = "분석완료";
 
 export class NotionError extends Error {
   constructor(
@@ -134,7 +145,7 @@ async function resolveTarget(client: NotionClient, targetId: string): Promise<Ta
 }
 
 function propertiesFor(stock: BriefingStock, tradeDate: string) {
-  return {
+  const properties: Record<string, unknown> = {
     [PROP.name]: { title: [{ text: { content: stock.name } }] },
     [PROP.code]: { rich_text: [{ text: { content: stock.code } }] },
     [PROP.market]: { select: { name: stock.market } },
@@ -148,6 +159,27 @@ function propertiesFor(stock: BriefingStock, tradeDate: string) {
     [PROP.dart]: { url: stock.dartUrl },
     [PROP.quote]: { url: stock.quoteUrl },
   };
+  if (stock.isSmallCap) {
+    properties[PROP.analysis] = { select: { name: SMALL_CAP_ANALYSIS_OPTION } };
+  }
+  return properties;
+}
+
+interface ExistingRow {
+  id: string;
+  properties?: Record<string, unknown>;
+}
+
+/** 쿼리로 돌아온 페이지의 select 속성 값 이름을 읽는다. */
+function selectName(properties: Record<string, unknown> | undefined, prop: string): string | undefined {
+  const value = properties?.[prop] as { select?: { name?: string } } | undefined;
+  return value?.select?.name;
+}
+
+/** 쿼리로 돌아온 페이지의 rich_text 속성 첫 줄을 읽는다. */
+function richText(properties: Record<string, unknown> | undefined, prop: string): string | undefined {
+  const value = properties?.[prop] as { rich_text?: { plain_text?: string }[] } | undefined;
+  return value?.rich_text?.[0]?.plain_text;
 }
 
 /** 쿼리 결과를 끝까지 넘긴다. 구버전은 POST, 신버전은 PATCH를 받는다. */
@@ -155,12 +187,12 @@ async function queryAllRows(
   client: NotionClient,
   target: Target,
   body: Record<string, unknown>
-): Promise<{ id: string }[]> {
-  const results: { id: string }[] = [];
+): Promise<ExistingRow[]> {
+  const results: ExistingRow[] = [];
   let cursor: string | undefined;
   for (;;) {
     const payload = cursor ? { ...body, start_cursor: cursor } : body;
-    let page: { results?: { id: string }[]; has_more?: boolean; next_cursor?: string };
+    let page: { results?: ExistingRow[]; has_more?: boolean; next_cursor?: string };
     try {
       page = await client.request("POST", target.queryPath, payload);
     } catch (err) {
@@ -186,6 +218,8 @@ async function trashRow(client: NotionClient, pageId: string): Promise<void> {
 export interface NotionPushResult {
   written: number;
   replaced: number;
+  /** "분석완료"로 표시돼 있어 건드리지 않고 그대로 둔 행 수. */
+  preserved: number;
 }
 
 /**
@@ -208,14 +242,23 @@ export async function pushBriefingToNotion(
   const existing = await queryAllRows(client, target, {
     filter: { property: PROP.date, date: { equals: briefing.tradeDate } },
   });
-  for (const row of existing) await trashRow(client, row.id);
 
-  for (const stock of briefing.stocks) {
+  const preserved = existing.filter(
+    (row) => selectName(row.properties, PROP.analysis) === ANALYSIS_DONE_OPTION
+  );
+  const preservedCodes = new Set(
+    preserved.map((row) => richText(row.properties, PROP.code)).filter((code): code is string => !!code)
+  );
+  const toTrash = existing.filter((row) => !preserved.includes(row));
+  for (const row of toTrash) await trashRow(client, row.id);
+
+  const stocksToWrite = briefing.stocks.filter((s) => !preservedCodes.has(s.code));
+  for (const stock of stocksToWrite) {
     await client.request("POST", "/pages", {
       parent: target.parent,
       properties: propertiesFor(stock, briefing.tradeDate),
     });
   }
 
-  return { written: briefing.stocks.length, replaced: existing.length };
+  return { written: stocksToWrite.length, replaced: toTrash.length, preserved: preserved.length };
 }

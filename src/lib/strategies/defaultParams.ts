@@ -60,7 +60,7 @@ export interface Strategy4Params {
 // 4개 전략 공통 최소 시가총액 기준 (1000억원). 초소형주의 관리종목 전환·상장폐지
 // 리스크를 배제하기 위한 하한선으로, 사용자 확인을 거쳐 채택했다(설정 페이지에서
 // 전략별로 개별 조정 가능).
-const MIN_MARKET_CAP = 100_000_000_000;
+export const MIN_MARKET_CAP = 100_000_000_000;
 
 export const DEFAULT_STRATEGY1_PARAMS: Strategy1Params = {
   minVolume: 10_000_000,
