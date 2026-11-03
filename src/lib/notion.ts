@@ -33,7 +33,12 @@ const PROP = {
   news: "뉴스",
   dart: "공시",
   quote: "시세",
+  analysis: "분석",
 } as const;
+
+/** 시가총액 1000억원 미만 종목에 자동으로 세팅하는 "분석" 속성 값. 노션에서 수동으로
+ *  "분석완료"로 바꾸면 이 값은 덮어써진다 — 단일 선택 속성이라 하나만 남는다. */
+const SMALL_CAP_ANALYSIS_OPTION = "소형주";
 
 export class NotionError extends Error {
   constructor(
@@ -134,7 +139,7 @@ async function resolveTarget(client: NotionClient, targetId: string): Promise<Ta
 }
 
 function propertiesFor(stock: BriefingStock, tradeDate: string) {
-  return {
+  const properties: Record<string, unknown> = {
     [PROP.name]: { title: [{ text: { content: stock.name } }] },
     [PROP.code]: { rich_text: [{ text: { content: stock.code } }] },
     [PROP.market]: { select: { name: stock.market } },
@@ -148,6 +153,10 @@ function propertiesFor(stock: BriefingStock, tradeDate: string) {
     [PROP.dart]: { url: stock.dartUrl },
     [PROP.quote]: { url: stock.quoteUrl },
   };
+  if (stock.isSmallCap) {
+    properties[PROP.analysis] = { select: { name: SMALL_CAP_ANALYSIS_OPTION } };
+  }
+  return properties;
 }
 
 /** 쿼리 결과를 끝까지 넘긴다. 구버전은 POST, 신버전은 PATCH를 받는다. */
