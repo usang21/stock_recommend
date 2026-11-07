@@ -46,6 +46,8 @@ export function serializeReportRun(report: ReportRunWithRelations) {
             institutionalMinBuyDays: p.institutionalMinBuyDays,
             institutionalDays: p.institutionalDays,
             newHighLabel: p.newHighLabel,
+            // 전략2 최종 단계 전용: 연속으로 통과한 일수 (API 라우트에서 채워 넣는다).
+            consecutiveDays: null as number | null,
           })),
         })),
     })),
