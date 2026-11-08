@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { STRATEGY2_STREAK_ALERT_THRESHOLD } from "@/lib/strategies/strategy2StreakConfig";
 
 export interface PickRow {
   code: string;
@@ -19,6 +20,8 @@ export interface PickRow {
   institutionalMinBuyDays?: number | null;
   institutionalDays?: unknown;
   newHighLabel?: string | null;
+  /** 전략2 전용: 최종 단계에 연속으로 등장한 일수. */
+  consecutiveDays?: number | null;
 }
 
 interface InstitutionalDay {
@@ -152,6 +155,19 @@ export function StockTable({
                 {p.newHighLabel && (
                   <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">
                     {p.newHighLabel}
+                  </span>
+                )}
+                {p.consecutiveDays != null && p.consecutiveDays >= 2 && (
+                  <span
+                    title="장대양봉 후 5일선 이격도 조건을 연속으로 통과한 일수. 길어질수록 눌림목 없이 재차 상승을 시도할 시점(매수 타이밍)이 가까워진다."
+                    className={`ml-1.5 rounded px-1.5 py-0.5 text-xs font-medium ${
+                      p.consecutiveDays >= STRATEGY2_STREAK_ALERT_THRESHOLD
+                        ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300"
+                        : "bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400"
+                    }`}
+                  >
+                    {p.consecutiveDays}일째 횡보
+                    {p.consecutiveDays >= STRATEGY2_STREAK_ALERT_THRESHOLD ? " · 매수 타이밍 근접" : ""}
                   </span>
                 )}
               </td>

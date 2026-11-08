@@ -43,6 +43,16 @@ const PROP = {
  *  "분석완료"로 바꾸면 이 값은 덮어써진다 — 단일 선택 속성이라 하나만 남는다. */
 const SMALL_CAP_ANALYSIS_OPTION = "소형주";
 
+/**
+ * 직전 거래일에도 같은 "구분"(상한가/대량거래)으로 걸렸던 종목에 자동으로 세팅하는
+ * "분석" 속성 값. 이미 전날 같은 이유로 확인한 종목이면 사람이 다시 들여다볼 필요가
+ * 적다고 보고, `isSmallCap`과 같은 방식(새 행을 쓸 때만 적용)으로 표시한다.
+ *
+ * 소형주 여부와 겹치면 연속발생을 우선한다 — "이미 본 종목"이라는 신호가 "소형주라
+ * 주의가 필요하다"는 신호보다 검토 생략 판단에 더 직접적이다.
+ */
+const CONSECUTIVE_ANALYSIS_OPTION = "연속발생";
+
 /** 사람이 "분석" 속성을 이 값으로 바꾸면 재실행 시 보존 대상이 된다. */
 const ANALYSIS_DONE_OPTION = "분석완료";
 
@@ -144,7 +154,7 @@ async function resolveTarget(client: NotionClient, targetId: string): Promise<Ta
   }
 }
 
-function propertiesFor(stock: BriefingStock, tradeDate: string) {
+function propertiesFor(stock: BriefingStock, tradeDate: string, isConsecutive: boolean) {
   const properties: Record<string, unknown> = {
     [PROP.name]: { title: [{ text: { content: stock.name } }] },
     [PROP.code]: { rich_text: [{ text: { content: stock.code } }] },
@@ -159,7 +169,9 @@ function propertiesFor(stock: BriefingStock, tradeDate: string) {
     [PROP.dart]: { url: stock.dartUrl },
     [PROP.quote]: { url: stock.quoteUrl },
   };
-  if (stock.isSmallCap) {
+  if (isConsecutive) {
+    properties[PROP.analysis] = { select: { name: CONSECUTIVE_ANALYSIS_OPTION } };
+  } else if (stock.isSmallCap) {
     properties[PROP.analysis] = { select: { name: SMALL_CAP_ANALYSIS_OPTION } };
   }
   return properties;
@@ -182,7 +194,33 @@ function richText(properties: Record<string, unknown> | undefined, prop: string)
   return value?.rich_text?.[0]?.plain_text;
 }
 
-/** 쿼리 결과를 끝까지 넘긴다. 구버전은 POST, 신버전은 PATCH를 받는다. */
+/** 쿼리로 돌아온 페이지의 multi_select 속성 값 이름들을 읽는다. */
+function multiSelectNames(properties: Record<string, unknown> | undefined, prop: string): string[] {
+  const value = properties?.[prop] as { multi_select?: { name?: string }[] } | undefined;
+  return (value?.multi_select ?? []).flatMap((option) => (option.name ? [option.name] : []));
+}
+
+/** 쿼리로 돌아온 페이지의 date 속성 시작일을 읽는다. */
+function dateValue(properties: Record<string, unknown> | undefined, prop: string): string | undefined {
+  const value = properties?.[prop] as { date?: { start?: string } } | undefined;
+  return value?.date?.start;
+}
+
+/** 쿼리 한 페이지를 가져온다. 구버전은 POST, 신버전은 PATCH를 받는다. */
+async function queryPage(
+  client: NotionClient,
+  target: Target,
+  body: Record<string, unknown>
+): Promise<{ results?: ExistingRow[]; has_more?: boolean; next_cursor?: string }> {
+  try {
+    return await client.request("POST", target.queryPath, body);
+  } catch (err) {
+    if (!(err instanceof NotionError) || err.status !== 405) throw err;
+    return await client.request("PATCH", target.queryPath, body);
+  }
+}
+
+/** 쿼리 결과를 끝까지 넘긴다. */
 async function queryAllRows(
   client: NotionClient,
   target: Target,
@@ -192,17 +230,48 @@ async function queryAllRows(
   let cursor: string | undefined;
   for (;;) {
     const payload = cursor ? { ...body, start_cursor: cursor } : body;
-    let page: { results?: ExistingRow[]; has_more?: boolean; next_cursor?: string };
-    try {
-      page = await client.request("POST", target.queryPath, payload);
-    } catch (err) {
-      if (!(err instanceof NotionError) || err.status !== 405) throw err;
-      page = await client.request("PATCH", target.queryPath, payload);
-    }
+    const page = await queryPage(client, target, payload);
     results.push(...(page.results ?? []));
     if (!page.has_more) return results;
     cursor = page.next_cursor;
   }
+}
+
+/**
+ * `beforeDate`보다 앞선 가장 최근 날짜를 찾는다. 이 브리핑은 거래일에만 기록되므로,
+ * 달력상 전날이 아니라 "직전에 기록이 있던 날"이 평일 기준 직전 거래일과 같다
+ * (월요일에 실행하면 토·일을 건너뛰고 금요일을 찾는다).
+ */
+async function findPreviousTradeDate(
+  client: NotionClient,
+  target: Target,
+  beforeDate: string
+): Promise<string | null> {
+  const page = await queryPage(client, target, {
+    filter: { property: PROP.date, date: { before: beforeDate } },
+    sorts: [{ property: PROP.date, direction: "descending" }],
+    page_size: 1,
+  });
+  const row = page.results?.[0];
+  return row ? dateValue(row.properties, PROP.date) ?? null : null;
+}
+
+/** 특정 날짜에 기록된 행들을 종목코드 → "구분" 태그 집합으로 묶는다. */
+async function fetchTagsByCode(
+  client: NotionClient,
+  target: Target,
+  date: string
+): Promise<Map<string, Set<string>>> {
+  const rows = await queryAllRows(client, target, {
+    filter: { property: PROP.date, date: { equals: date } },
+  });
+  const byCode = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const code = richText(row.properties, PROP.code);
+    if (!code) continue;
+    byCode.set(code, new Set(multiSelectNames(row.properties, PROP.kind)));
+  }
+  return byCode;
 }
 
 async function trashRow(client: NotionClient, pageId: string): Promise<void> {
@@ -252,11 +321,18 @@ export async function pushBriefingToNotion(
   const toTrash = existing.filter((row) => !preserved.includes(row));
   for (const row of toTrash) await trashRow(client, row.id);
 
+  const previousTradeDate = await findPreviousTradeDate(client, target, briefing.tradeDate);
+  const previousTagsByCode = previousTradeDate
+    ? await fetchTagsByCode(client, target, previousTradeDate)
+    : new Map<string, Set<string>>();
+
   const stocksToWrite = briefing.stocks.filter((s) => !preservedCodes.has(s.code));
   for (const stock of stocksToWrite) {
+    const previousTags = previousTagsByCode.get(stock.code);
+    const isConsecutive = !!previousTags && stock.tags.some((tag) => previousTags.has(tag));
     await client.request("POST", "/pages", {
       parent: target.parent,
-      properties: propertiesFor(stock, briefing.tradeDate),
+      properties: propertiesFor(stock, briefing.tradeDate, isConsecutive),
     });
   }
 
