@@ -72,7 +72,7 @@ cp .env.example .env
 | `OLLAMA_BASE_URL` / `OLLAMA_MODEL` | provider=ollama일 때 사용할 로컬 Ollama 서버 주소/모델 |
 | `DART_API_KEY` | DART Open API 키 |
 | `RESEND_API_KEY` / `ALERT_EMAIL_FROM` / `ALERT_EMAIL_TO` | 리포트 완료 이메일 알림 |
-| `KAKAO_REST_API_KEY` / `KAKAO_CLIENT_SECRET` / `KAKAO_REDIRECT_URI` / `KAKAO_REFRESH_TOKEN_*` | 리포트 완료 카카오톡 알림. 설정 방법은 아래 "카카오톡 알림 설정" 참고 |
+| `KAKAO_REST_API_KEY` / `KAKAO_CLIENT_SECRET` / `KAKAO_REDIRECT_URI` | 리포트 완료 카카오톡 알림. 리프레시 토큰은 DB(`KakaoToken`)에 저장되고 환경변수가 아니다. 설정 방법은 아래 "카카오톡 알림 설정" 참고 |
 | `NEXT_PUBLIC_BASE_URL` | 이메일·카카오 메시지에 넣을 웹페이지 기본 URL (실제 배포 도메인이어야 링크가 열린다) |
 | `CRON_SECRET` | `/api/cron/generate-report` 인증용 (Vercel이 자동 주입하는 값을 그대로 써도 됨) |
 
@@ -297,16 +297,20 @@ Notion 자체 공유로는 "계정 없는 특정인에게만 공개"가 불가�
    Viewer로 초대한다. 휴면 카카오 계정은 초대 메일을 못 받을 수 있으니, 카카오
    앱/웹에 한 번 로그인해 휴면 해제부터 시키는 게 먼저다.
 3. 수신자마다 아래 링크를 열어 "카카오톡 메시지 전송" 항목에 동의하게 한다
-   (`state` 값은 수신자 구분용 라벨, 아무 문자열이나 가능):
+   (`state` 값은 DB 저장 키이자 `notifyAllKakaoRecipients`의 `recipients` 배열이
+   참조하는 label이다 — 임의 문자열이 아니라 `me` / `wife` 중 하나를 쓴다. 새
+   수신자를 추가하려면 그 전에 `kakao.ts`의 `recipients` 배열에 항목부터 추가):
    ```
-   https://kauth.kakao.com/oauth/authorize?client_id=<KAKAO_REST_API_KEY>&redirect_uri=<KAKAO_REDIRECT_URI>&response_type=code&scope=talk_message&state=<라벨>
+   https://kauth.kakao.com/oauth/authorize?client_id=<KAKAO_REST_API_KEY>&redirect_uri=<KAKAO_REDIRECT_URI>&response_type=code&scope=talk_message&state=me
    ```
-4. 동의가 끝나면 `/api/kakao/oauth-callback` 페이지에 refresh_token이 표시된다.
-   그 값을 `KAKAO_REFRESH_TOKEN_<라벨>` 환경변수로 로컬 `.env`와 Vercel 양쪽에
-   등록한다. 새 수신자를 추가했다면 `notifyAllKakaoRecipients`(`kakao.ts`)의
-   `recipients` 배열에도 항목을 추가해야 한다.
-5. 리프레시 토큰은 발급 후 약 2개월간 유효하다. 카카오 개발자 콘솔에서
-   "리프레시 토큰 자동 연장"을 켜두면 사용할 때마다 만료일이 늘어난다.
+4. 동의가 끝나면 `/api/kakao/oauth-callback`이 refresh_token을 DB(`KakaoToken`
+   테이블)에 바로 저장한다 — 환경변수를 손으로 등록할 필요가 없다.
+5. 리프레시 토큰은 발급 후 2개월이 지나면 하드 만료된다. 콘솔에 "자동 연장"
+   토글은 없다 — 대신 카카오가 액세스 토큰 갱신 응답에 새 refresh_token을
+   실어주면(유효기간 1개월 미만일 때) `refreshKakaoAccessToken`(`kakao.ts`)이
+   그 값을 받아 DB에 덮어쓴다. 그래서 cron이 매일 돌기만 하면 재인증 없이
+   계속 연장된다 — 3단계 재동의는 최초 1회(또는 이미 만료된 뒤 복구할 때)만
+   필요하다.
 
 ## 재료 판단 기준 수정
 

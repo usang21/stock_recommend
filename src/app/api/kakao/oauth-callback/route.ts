@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeKakaoCodeForToken } from "@/lib/dataSources/kakao";
+import { exchangeKakaoCodeForToken, saveKakaoRefreshToken } from "@/lib/dataSources/kakao";
 
 /**
- * 카카오 로그인 동의 후 돌아오는 콜백. 토큰을 교환해 화면에 그대로 보여준다.
- * (자동으로 env에 저장하지 않는다 — 시크릿 값이라 사람이 직접 확인하고
- * .env / Vercel 환경변수에 붙여넣도록 한다.)
+ * 카카오 로그인 동의 후 돌아오는 콜백. 토큰을 교환해 바로 DB(`KakaoToken`)에
+ * 저장한다 — 더 이상 사람이 refresh_token을 복사해 환경변수에 붙여넣을 필요가
+ * 없다(그 수동 단계가 갱신분을 못 받아 2개월마다 재인증해야 했던 원인이었다).
+ *
+ * state 값이 곧 저장 키(label)다. `notifyAllKakaoRecipients`(kakao.ts)의
+ * recipients 배열과 맞춰 "me" / "wife"를 쓴다.
  */
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
-  const state = request.nextUrl.searchParams.get("state") ?? "";
+  const state = request.nextUrl.searchParams.get("state") || "me";
   const error = request.nextUrl.searchParams.get("error");
 
   if (error) {
@@ -25,14 +28,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const token = await exchangeKakaoCodeForToken(code, redirectUri);
+    if (!token.refresh_token) {
+      return NextResponse.json({ error: "카카오 응답에 refresh_token이 없습니다." }, { status: 500 });
+    }
+    await saveKakaoRefreshToken(state, token.refresh_token);
     const html = `<!DOCTYPE html>
-<html lang="ko"><head><meta charset="utf-8"><title>카카오 토큰 발급 완료</title></head>
+<html lang="ko"><head><meta charset="utf-8"><title>카카오 토큰 저장 완료</title></head>
 <body style="font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px;">
-  <h2>발급 완료 (${state || "이름 미지정"})</h2>
-  <p>아래 refresh_token 값을 복사해서 환경변수에 붙여넣으세요.</p>
-  <p><b>로컬 .env</b>: ${state === "wife" ? "KAKAO_REFRESH_TOKEN_WIFE" : "KAKAO_REFRESH_TOKEN_ME"}="..."</p>
-  <p><b>Vercel</b>: <code>vercel env add ${state === "wife" ? "KAKAO_REFRESH_TOKEN_WIFE" : "KAKAO_REFRESH_TOKEN_ME"} production</code></p>
-  <textarea readonly style="width:100%;height:80px;font-family:monospace;">${token.refresh_token ?? "(refresh_token 없음)"}</textarea>
+  <h2>저장 완료 (label: ${state})</h2>
+  <p>DB에 바로 저장했습니다. 환경변수를 따로 건드릴 필요 없습니다.</p>
   <p style="color:#888;font-size:13px;">이 화면은 새로고침하면 재사용 안 됩니다 (code는 1회용). 다시 받으려면 로그인 링크부터 다시 진행하세요.</p>
 </body></html>`;
     return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });

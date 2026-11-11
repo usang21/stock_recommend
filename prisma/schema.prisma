@@ -173,6 +173,17 @@ model RecommendationLogicVersion {
   @@index([kind, createdAt])
 }
 
+// 카카오 "나에게 보내기" 리프레시 토큰 (DESIGN.md §7).
+// 최초 발급은 /api/kakao/oauth-callback에서 저장하고, 이후 액세스 토큰 갱신 때
+// 카카오가 새 refresh_token을 내려주면(유효기간 1개월 미만 시) 여기에 덮어써서
+// 2개월 하드 만료 전에 계속 갱신되게 한다 — env var에 고정해두면 갱신분을 받을
+// 길이 없어 2개월마다 재인증해야 했다.
+model KakaoToken {
+  label        String   @id // "me" | "wife" 등, oauth 동의 시 state 값
+  refreshToken String
+  updatedAt    DateTime @updatedAt
+}
+
 // 그날 주식시장이 열렸는지 (DESIGN.md §15).
 // 장중(13시)에 한 번 확인해 기록하고, 이후 cron들이 이 값을 보고 실행 여부를 정한다.
 // 장 마감 후에는 휴장일과 "오늘 장이 끝남"을 구분할 수 없어, 장중에 확인한 결과를
