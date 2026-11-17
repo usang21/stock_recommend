@@ -15,6 +15,9 @@ export function AppNav() {
           <Link href="/briefing" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             오늘의 브리핑
           </Link>
+          <Link href="/indicators" className="hover:text-neutral-900 dark:hover:text-neutral-100">
+            주요 지표
+          </Link>
           <Link href="/history" className="hover:text-neutral-900 dark:hover:text-neutral-100">
             히스토리
           </Link>

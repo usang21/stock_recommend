@@ -185,6 +185,18 @@ README "설계상 주요 가정"에 적힌 대로, 공식 데이터가 없어 �
 
 ## P3 — 향후 기능
 
+### 18-1. `/indicators` 화면에 VKOSPI 추가 (상태: 열림)
+
+`/indicators`에 VIX는 FRED 공식 CSV로 구현했다(`src/lib/dataSources/fred.ts`,
+`src/lib/marketIndicators.ts`). VKOSPI는 네이버의 `siseJson.naver`(심볼 `VKOSPI` 등
+여러 변형 시도) · `polling.finance.naver.com` · KRX 공식 JSON API(`data.krx.co.kr`,
+세션 쿠키 없이 호출하면 `LOGOUT` 응답)까지 확인했지만 키 없이 바로 쓸 수 있는
+안정적인 소스를 찾지 못해 보류했다.
+
+- 후보: data.go.kr(공공데이터포털)의 KRX 지수 API — 무료지만 서비스키 발급(사용자
+  가입)이 필요해 사용자 확인 후 진행한다.
+- 또는 KRX `data.krx.co.kr`를 세션 쿠키 발급(generate.cmd)까지 포함해 다시 시도.
+
 ### 18. 매도 시그널 (상태: 열림)
 
 `DESIGN.md §2`·`§11`이 현재 범위에서 제외하면서 "향후 별도 기능으로 개발 예정"으로
